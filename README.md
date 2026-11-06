@@ -167,3 +167,7 @@ internal/service/        business rules (state transitions)
 internal/workflow/       epic and story state machines
 internal/api/            HTTP handlers, JSON and error helpers, UI/SPA serving
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
