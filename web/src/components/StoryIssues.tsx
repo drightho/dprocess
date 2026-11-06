@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type Schemas } from "../api/client";
 import { githubLabel } from "../lib/github";
+import RemoteStatusBadge from "./RemoteStatusBadge";
 
 type StoryDetail = Schemas["StoryDetail"];
 
@@ -32,7 +33,8 @@ export default function StoryIssues({ story }: { story: StoryDetail }) {
             <li key={i.id}>
               <a href={i.github_url} target="_blank" rel="noopener noreferrer">
                 {githubLabel(i)}
-              </a>
+              </a>{" "}
+              <RemoteStatusBadge status={i.remote_status} />
               {i.title && <> {i.title}</>}
               {i.kind && <> <span className="chip">{i.kind}</span></>}{" "}
               <button type="button" aria-label={`Unlink issue ${githubLabel(i)}`} disabled={unlink.isPending} onClick={() => unlink.mutate(i.id)}>

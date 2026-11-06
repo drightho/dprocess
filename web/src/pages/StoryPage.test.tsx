@@ -28,6 +28,8 @@ interface Setup {
   dependency?: (method: string, id: number) => Response | undefined;
   /** Answer a pull request removal with this instead of applying it. */
   removePullRequest?: (id: number) => Response | undefined;
+  /** Whether GET /github-sync reports the sync as enabled. */
+  githubSync?: boolean;
 }
 
 /** A small stateful fake of the story endpoints: a successful write changes what the next GET returns. */
@@ -88,6 +90,7 @@ function setup(init: Setup = {}) {
       w.comments = [...w.comments, created];
       return json(created, 201);
     },
+    "/api/v1/github-sync": { enabled: init.githubSync === true, last_run_at: null, last_error: "" },
     // Pull requests: only canonical github.com pull request URLs, no duplicates (like the real server).
     "/api/v1/stories/1/pull-requests": async (req: Request) => {
       const body = (await req.json()) as { github_url: string };
@@ -879,4 +882,26 @@ describe("StoryPage issues", () => {
       expect(w.issueWrites).toEqual([{ id: 2, body: { story_id: null } }]);
     });
   }
+
+  it("shows the cached GitHub status beside linked pull requests and issues when the sync is on", async () => {
+    setup({
+      story: {
+        state: "implementation",
+        pull_requests: [pullRequest({ id: 1, number: 7, remote_status: { state: "merged", title: "Add thing", checked_at: "2026-01-02T03:04:05.000Z" } })],
+        issues: [issue({ id: 5, story_id: 1, number: 3 })], // never synced: unknown
+      },
+      githubSync: true,
+    });
+    renderAt();
+    const prs = await screen.findByRole("region", { name: "Pull requests" });
+    expect((await within(prs).findByLabelText("GitHub status: merged")).textContent).toBe("merged");
+    expect((await screen.findByLabelText("GitHub status: unknown")).textContent).toBe("unknown");
+  });
+
+  it("shows no GitHub status badges when the sync is off", async () => {
+    setup({ story: { pull_requests: [pullRequest({ id: 1 })] } });
+    renderAt();
+    await screen.findByText("acme/widgets#7");
+    expect(screen.queryByLabelText(/GitHub status/)).toBeNull();
+  });
 });

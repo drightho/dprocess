@@ -89,6 +89,20 @@ button { width: fit-content; cursor: pointer; }
 .badge.state[data-state="finished"] { --st: var(--st-finished); }
 .badge.state[data-state="cancelled"] { --st: var(--st-cancelled); }
 
+.badge.remote {
+  display: inline-block;
+  padding: 0 0.5rem;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.badge.remote[data-remote="open"] { --rs: var(--st-finished); }
+.badge.remote[data-remote="merged"] { --rs: var(--st-design); }
+.badge.remote[data-remote="closed"] { --rs: var(--st-cancelled); }
+.badge.remote[data-remote="open"], .badge.remote[data-remote="merged"], .badge.remote[data-remote="closed"] { border-color: var(--rs); color: var(--rs); }
+
 .chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .chip {
   padding: 0 0.4rem;

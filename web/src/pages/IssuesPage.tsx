@@ -6,6 +6,7 @@ import IssueForm from "../components/IssueForm";
 import NotFoundNotice from "../components/NotFoundNotice";
 import { formatTime } from "../lib/format";
 import { githubLabel } from "../lib/github";
+import RemoteStatusBadge from "../components/RemoteStatusBadge";
 
 type Issue = Schemas["Issue"];
 
@@ -74,7 +75,7 @@ export default function IssuesPage() {
         <Link to={`/projects/${id}`}>&larr; {project.data.name}</Link>
       </p>
       <h1>Issues</h1>
-      <p className="meta">References to GitHub issues. DProcess stores the link only; it never contacts GitHub.</p>
+      <p className="meta">References to GitHub issues. DProcess stores the link; it only reads GitHub (status badges) when the server's optional sync is on.</p>
 
       {adding ? (
         <IssueForm projectId={id} stories={stories.data} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
@@ -133,7 +134,8 @@ export default function IssuesPage() {
                   <strong>
                     <a href={i.github_url} target="_blank" rel="noopener noreferrer">
                       {githubLabel(i)}
-                    </a>
+                    </a>{" "}
+                    <RemoteStatusBadge status={i.remote_status} />
                     {i.title && <> {i.title}</>}
                   </strong>
                   {i.kind && <span className="chip">{i.kind}</span>}
