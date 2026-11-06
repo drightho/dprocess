@@ -8,6 +8,8 @@ import NotFoundNotice from "../components/NotFoundNotice";
 import StateBadge from "../components/StateBadge";
 import StoryForm from "../components/StoryForm";
 import StoryTransitionPanel from "../components/StoryTransitionPanel";
+import CommentThread from "../components/CommentThread";
+import TagEditor from "../components/TagEditor";
 import { isTerminal, WARN_LOC } from "../lib/board";
 
 
@@ -102,25 +104,19 @@ export default function StoryPage() {
                 </span>
               ))}
             </dd>
-            {s.tags.length > 0 && (
-              <>
-                <dt>Tags</dt>
-                <dd className="chips">
-                  {s.tags.map((t) => (
-                    <span key={t} className="chip">
-                      {t}
-                    </span>
-                  ))}
-                </dd>
-              </>
-            )}
           </dl>
         </>
       )}
 
       <StoryTransitionPanel story={s} />
 
+      <h2>Tags</h2>
+      <TagEditor kind="story" id={s.id} projectId={s.project_id} epicId={s.epic_id} tags={s.tags} />
+
       <DependencySection story={s} />
+
+      <h2>Comments</h2>
+      <CommentThread kind="story" id={s.id} />
 
       <h2>History</h2>
       {history.isError ? (

@@ -40,9 +40,9 @@ export default function StoryCard({ story, epic, showState = false, actions }: P
       {story.tags.length > 0 && (
         <span className="chips">
           {story.tags.map((t) => (
-            <span key={t} className="chip">
+            <Link key={t} className="chip" to={`/projects/${story.project_id}?tag=${encodeURIComponent(t)}`}>
               {t}
-            </span>
+            </Link>
           ))}
         </span>
       )}
