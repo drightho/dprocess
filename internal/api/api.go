@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 
+	"github.com/dright/dprocess/internal/github"
 	"github.com/dright/dprocess/internal/store"
 )
 
@@ -14,6 +15,8 @@ type Server struct {
 	Store *store.Store
 	// UI, if set, is served at / with SPA fallback to index.html.
 	UI fs.FS
+	// GitHub is the optional read-only status sync; nil means disabled.
+	GitHub *github.Syncer
 }
 
 // Handler returns the root HTTP handler.
@@ -27,6 +30,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerTagsAndComments(mux)
 	s.registerIssues(mux)
 	s.registerPullRequests(mux)
+	s.registerGitHubSync(mux)
 	mux.HandleFunc("GET /api/v1/openapi.yaml", s.serveSpec)
 	mux.HandleFunc("/api/", apiNotFound)
 	if s.UI != nil {

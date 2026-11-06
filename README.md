@@ -6,7 +6,7 @@ DProcess tracks the activities of a software development process. Software requi
 - **Epic** - a group of related stories. States: `draft`, `review`, `ready`, `finished`, `cancelled`.
 - **Story** - a deliverable, verifiable piece of software, estimated at no more than 400 lines of code. States: `draft`, `review`, `design`, `implementation`, `testing`, `finished`, `cancelled`. A story may only depend on stories in the same project.
 
-GitHub issues are tracked as a separate concept: DProcess stores references to issues (URL, repo, number), optionally linked to a story. It does not call GitHub.
+GitHub issues are tracked as a separate concept: DProcess stores references to issues (URL, repo, number), optionally linked to a story. By default it does not call GitHub; an optional, read-only sync (see below) can cache the status of linked issues and pull requests.
 
 ## Architecture
 
@@ -33,6 +33,9 @@ Open http://127.0.0.1:8080/ for the web UI. Without `make web` the server still 
 |----------|----------|------------------|-------------------|
 | Database | `--db`   | `DPROCESS_DB`    | `./dprocess.db`   |
 | Listen   | `--addr` | `DPROCESS_ADDR`  | `127.0.0.1:8080`  |
+| GitHub status sync | `--github-sync`, `--github-sync-interval` | `DPROCESS_GITHUB_SYNC=1`, `DPROCESS_GITHUB_TOKEN` | off, 15m |
+
+**GitHub status sync (optional, off by default).** With `--github-sync` the server reads (GET only, never writes) the title and open/closed/merged state of every linked issue and pull request and caches it; `remote_status` on issues and pull requests shows it, and `GET /api/v1/github-sync` reports whether the sync runs and how the last run went. `DPROCESS_GITHUB_TOKEN` is optional (public repositories work without one, at GitHub's low anonymous rate limit). A missing, invalid or rate-limited token never fails the server: the run stops, `last_error` says why, and status stays `unknown`. Status older than 24 hours, or for an item GitHub no longer shows, is `unknown` too.
 
 The database path is relative to the directory the server is started from. WAL mode also creates `-wal` and `-shm` files next to it. `make clean` removes the binary and database files.
 
@@ -81,7 +84,7 @@ curl -s -X POST   localhost:8080/api/v1/stories/1/pull-requests -d '{"github_url
 curl -s           localhost:8080/api/v1/stories/1/pull-requests        # also listed in GET /stories/1 as pull_requests
 curl -s -X DELETE localhost:8080/api/v1/stories/1/pull-requests/1
 
-# GitHub issue references (DProcess never calls GitHub)
+# GitHub issue references (GitHub is only read when the optional status sync is on)
 curl -s -X POST  localhost:8080/api/v1/projects/1/issues -d '{"github_url":"https://github.com/acme/widgets/issues/42","title":"Crash on save","kind":"bug","story_id":1}'
 curl -s          'localhost:8080/api/v1/projects/1/issues?story=1'
 curl -s -X PATCH localhost:8080/api/v1/issues/1 -d '{"story_id":null}'   # unlink from the story

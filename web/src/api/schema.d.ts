@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/github-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the optional read-only GitHub status sync is running
+         * @description The sync is off unless the server was started with --github-sync. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
+         */
+        get: operations["getGitHubSync"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects": {
         parameters: {
             query?: never;
@@ -563,6 +583,21 @@ export interface components {
             body: string;
             author?: string;
         };
+        GitHubSync: {
+            enabled: boolean;
+            /** Format: date-time */
+            last_run_at: string | null;
+            /** @description Empty when the last run was clean */
+            last_error: string;
+        };
+        /** @description Cached GitHub status. unknown means never synced, older than 24 hours, or no longer visible on GitHub. */
+        RemoteStatus: {
+            /** @enum {string} */
+            state: "open" | "closed" | "merged" | "unknown";
+            title: string;
+            /** Format: date-time */
+            checked_at: string | null;
+        };
         Issue: {
             /** Format: int64 */
             id: number;
@@ -580,6 +615,7 @@ export interface components {
             kind: string;
             /** Format: date-time */
             created_at: string;
+            remote_status: components["schemas"]["RemoteStatus"];
         };
         PullRequest: {
             /** Format: int64 */
@@ -594,6 +630,7 @@ export interface components {
             number: number;
             /** Format: date-time */
             created_at: string;
+            remote_status: components["schemas"]["RemoteStatus"];
         };
         PullRequestCreate: {
             github_url: string;
@@ -693,6 +730,26 @@ export interface operations {
                 };
             };
             503: components["responses"]["Problem"];
+        };
+    };
+    getGitHubSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubSync"];
+                };
+            };
         };
     };
     listProjects: {
