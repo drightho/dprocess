@@ -1,0 +1,14 @@
+{
+  "name": "dprocess-marketplace",
+  "description": "Claude Code plugins for DProcess",
+  "owner": {
+    "name": "Dright Ho"
+  },
+  "plugins": [
+    {
+      "name": "dprocess",
+      "source": "./plugins/dprocess",
+      "description": "Skills for working with a DProcess project plan: implement a story end to end and keep its status on the DProcess server in step."
+    }
+  ]
+}
