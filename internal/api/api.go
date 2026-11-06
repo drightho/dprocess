@@ -20,6 +20,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerProjects(mux)
 	s.registerEpics(mux)
 	s.registerStories(mux)
+	s.registerDependencies(mux)
 	return mux
 }
 

@@ -42,4 +42,5 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 
 Done: scaffold + migrations + health; projects CRUD; epics CRUD + `internal/workflow` + epic transition endpoint + history (`store.transition` is shared with stories).
 Also done: stories CRUD, transitions, history, LOC warning (`service.StoryWarnings`). A story's epic cannot be changed after creation; deleting a story that others depend on returns 409.
-Next: dependencies; comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.
+Also done: story dependencies. Their invariants (same project, no self-dependency, no cycle via a recursive CTE) live in `store.AddDependency` rather than `service` because the check and insert must share one transaction.
+Next: comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.

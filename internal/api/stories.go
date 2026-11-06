@@ -178,7 +178,12 @@ func (s *Server) getStory(w http.ResponseWriter, r *http.Request) {
 		storeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, viewStory(st))
+	d, err := s.detailStory(st)
+	if err != nil {
+		storeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (s *Server) updateStory(w http.ResponseWriter, r *http.Request) {

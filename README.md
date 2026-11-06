@@ -16,8 +16,9 @@ Work in progress. Implemented so far:
 - Projects CRUD (`/api/v1/projects`)
 - Epics CRUD, state transitions and history (provisional transition rules)
 - Stories CRUD, state transitions, history and the 400 LOC warning
+- Story dependencies with same-project and cycle checks
 
-Planned: story dependencies, comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
+Planned: comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
 
 ## Architecture
 
@@ -73,7 +74,13 @@ curl -s -X PATCH localhost:8080/api/v1/stories/1 -d '{"estimate_loc":null}'   # 
 curl -s -X POST  localhost:8080/api/v1/stories/1/transition -d '{"to":"review"}'
 curl -s          localhost:8080/api/v1/stories/1/history
 curl -s -X DELETE localhost:8080/api/v1/stories/1
+
+# dependencies: story 1 depends on story 2
+curl -s -X PUT    localhost:8080/api/v1/stories/1/dependencies/2   # idempotent; returns the story with depends_on/dependents
+curl -s -X DELETE localhost:8080/api/v1/stories/1/dependencies/2   # 404 if the dependency does not exist
 ```
+
+`GET /stories/{id}` and the dependency `PUT` return `depends_on` and `dependents` lists (id, epic_id, name, state). A dependency must connect two different stories of the same project (422 otherwise) and must not create a cycle, direct or transitive (409).
 
 An `estimate_loc` above 400 is accepted, and the story response then carries `"warnings": ["estimate_exceeds_400_loc"]`. A story's epic cannot be changed after creation, and deleting a story that other stories depend on returns 409.
 
