@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type Schemas } from "../api/client";
 import { isTerminal } from "../lib/board";
 import { githubLabel } from "../lib/github";
+import RemoteStatusBadge from "./RemoteStatusBadge";
 
 type StoryDetail = Schemas["StoryDetail"];
 
@@ -46,7 +47,8 @@ export default function PullRequestSection({ story }: { story: StoryDetail }) {
             <li key={pr.id}>
               <a href={pr.github_url} target="_blank" rel="noopener noreferrer">
                 {githubLabel(pr)}
-              </a>
+              </a>{" "}
+              <RemoteStatusBadge status={pr.remote_status} />
               {!frozen && (
                 <>
                   {" "}
