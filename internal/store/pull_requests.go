@@ -15,6 +15,8 @@ type PullRequest struct {
 	GitHubRepo string `json:"github_repo"`
 	Number     int64  `json:"number"`
 	CreatedAt  string `json:"created_at"`
+	// Remote is the cached GitHub status (state "unknown" unless synced).
+	Remote RemoteStatus `json:"remote_status"`
 }
 
 const prCols = `id, story_id, github_url, github_repo, number, created_at`
@@ -53,7 +55,12 @@ func (s *Store) AddPullRequest(storyID int64, url, repo string, number int64) (*
 		return nil, lockedErr(storyID, st.State)
 	}
 	id, _ := res.LastInsertId()
-	return scanPR(s.DB.QueryRow(`SELECT `+prCols+` FROM story_pull_requests WHERE id = ?`, id))
+	p, err := scanPR(s.DB.QueryRow(`SELECT `+prCols+` FROM story_pull_requests WHERE id = ?`, id))
+	if err != nil {
+		return nil, err
+	}
+	p.Remote = s.RemoteStatus(KindPull, p.GitHubRepo, p.Number)
+	return p, nil
 }
 
 // ListPullRequests returns a story's pull requests in the order they were
@@ -72,7 +79,14 @@ func (s *Store) ListPullRequests(storyID int64) ([]*PullRequest, error) {
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // the single connection must be free for the status lookups
+	for _, p := range out {
+		p.Remote = s.RemoteStatus(KindPull, p.GitHubRepo, p.Number)
+	}
+	return out, nil
 }
 
 // ListPullRequestsChecked is ListPullRequests for a story that must exist.

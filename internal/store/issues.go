@@ -18,6 +18,8 @@ type Issue struct {
 	Title      string `json:"title"`
 	Kind       string `json:"kind"`
 	CreatedAt  string `json:"created_at"`
+	// Remote is the cached GitHub status (state "unknown" unless synced).
+	Remote RemoteStatus `json:"remote_status"`
 }
 
 const issueCols = `id, project_id, story_id, github_url, github_repo, COALESCE(number, 0), title_cache, kind, created_at`
@@ -98,7 +100,12 @@ func (s *Store) CreateIssue(projectID int64, in NewIssue) (*Issue, error) {
 
 // GetIssue returns one issue or ErrNotFound.
 func (s *Store) GetIssue(id int64) (*Issue, error) {
-	return scanIssue(s.DB.QueryRow(`SELECT `+issueCols+` FROM issues WHERE id = ?`, id))
+	i, err := scanIssue(s.DB.QueryRow(`SELECT `+issueCols+` FROM issues WHERE id = ?`, id))
+	if err != nil {
+		return nil, err
+	}
+	i.Remote = s.RemoteStatus(KindIssue, i.GitHubRepo, i.Number)
+	return i, nil
 }
 
 // ListIssues returns a project's issues; storyID != 0 restricts to one story.
@@ -125,7 +132,14 @@ func (s *Store) ListIssues(projectID, storyID int64) ([]*Issue, error) {
 		}
 		out = append(out, i)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // the single connection must be free for the status lookups
+	for _, i := range out {
+		i.Remote = s.RemoteStatus(KindIssue, i.GitHubRepo, i.Number)
+	}
+	return out, nil
 }
 
 // UpdateIssue applies a patch. The GitHub URL is immutable.

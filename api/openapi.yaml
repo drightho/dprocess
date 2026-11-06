@@ -37,6 +37,19 @@ paths:
                   status: { type: string, example: ok }
         "503": { $ref: "#/components/responses/Problem" }
 
+  /github-sync:
+    get:
+      tags: [System]
+      operationId: getGitHubSync
+      summary: Whether the optional read-only GitHub status sync is running
+      description: The sync is off unless the server was started with --github-sync. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
+      responses:
+        "200":
+          description: Sync state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GitHubSync" }
+
   /projects:
     get:
       tags: [Projects]
@@ -922,9 +935,24 @@ components:
         body: { type: string, minLength: 1 }
         author: { type: string }
 
+    GitHubSync:
+      type: object
+      required: [enabled, last_run_at, last_error]
+      properties:
+        enabled: { type: boolean }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, description: "Empty when the last run was clean" }
+    RemoteStatus:
+      type: object
+      description: Cached GitHub status. unknown means never synced, older than 24 hours, or no longer visible on GitHub.
+      required: [state, title, checked_at]
+      properties:
+        state: { type: string, enum: [open, closed, merged, unknown] }
+        title: { type: string }
+        checked_at: { type: string, format: date-time, nullable: true }
     Issue:
       type: object
-      required: [id, project_id, story_id, github_url, github_repo, number, title, kind, created_at]
+      required: [id, project_id, story_id, github_url, github_repo, number, title, kind, created_at, remote_status]
       properties:
         id: { type: integer, format: int64 }
         project_id: { type: integer, format: int64 }
@@ -935,9 +963,10 @@ components:
         title: { type: string }
         kind: { type: string }
         created_at: { type: string, format: date-time }
+        remote_status: { $ref: "#/components/schemas/RemoteStatus" }
     PullRequest:
       type: object
-      required: [id, story_id, github_url, github_repo, number, created_at]
+      required: [id, story_id, github_url, github_repo, number, created_at, remote_status]
       properties:
         id: { type: integer, format: int64 }
         story_id: { type: integer, format: int64 }
@@ -945,6 +974,7 @@ components:
         github_repo: { type: string, example: acme/widgets }
         number: { type: integer, format: int64 }
         created_at: { type: string, format: date-time }
+        remote_status: { $ref: "#/components/schemas/RemoteStatus" }
     PullRequestCreate:
       type: object
       additionalProperties: false

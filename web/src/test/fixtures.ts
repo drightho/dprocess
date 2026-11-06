@@ -66,6 +66,7 @@ export function issue(over: Partial<Issue> = {}): Issue {
     title: "",
     kind: "",
     created_at: "2026-01-02T03:04:05.000Z",
+    remote_status: { state: "unknown", title: "", checked_at: null },
     ...over,
   };
 }
@@ -78,6 +79,7 @@ export function pullRequest(over: Partial<PullRequest> = {}): PullRequest {
     github_repo: "acme/widgets",
     number: 7,
     created_at: "2026-01-02T03:04:05.000Z",
+    remote_status: { state: "unknown", title: "", checked_at: null },
     ...over,
   };
 }
