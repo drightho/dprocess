@@ -8,25 +8,6 @@ DProcess tracks the activities of a software development process. Software requi
 
 GitHub issues are tracked as a separate concept: DProcess stores references to issues (URL, repo, number), optionally linked to a story. It does not call GitHub.
 
-## Status
-
-Work in progress. Implemented so far:
-
-- Server scaffold, embedded SQLite with migrations, health endpoint
-- Projects CRUD (`/api/v1/projects`)
-- Epics CRUD, state transitions and history
-- Stories CRUD, state transitions, history and the 400 LOC warning
-- Story dependencies with same-project and cycle checks
-- Tags and comments on epics and stories; GitHub issue references; GitHub pull request links on stories
-- OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
-- Web UI (React + TypeScript + Vite) embedded in the binary: a landing page at `/` (find a project by exact name, the 10 most recently visited projects, create a project), the list of all projects at `/projects`, a project overview page at `/projects/{id}` (epics with state and progress, and a story board with one column per state, filterable by epic, assignee and tag), forms to create and edit epics and stories (a "New epic" form on the project page; "Edit epic", "New story" and per-story "Edit" on the epic page; the size estimate warns live above 400 lines, server validation messages appear inside the form, and finished or cancelled stories are shown read-only), a story page at `/stories/{id}` (fields and warnings, edit in place, the moves the server allows including the backward ones, with its explanation when a move is refused; dependencies in both directions, which can be added from a picker limited to the story's project and removed one by one (a cancelled dependency is flagged because it keeps the story from finishing; refusals such as cycles are explained by the server); tags; comments; pull request links (added and removed there; a finished or cancelled story shows them read-only); the issues linked to it; history; finished and cancelled stories are read-only except that their tags and comments stay open), and an epic page at `/epics/{id}` (tags and comments, its stories and state history, and buttons for the moves the server allows; a refused move shows the server's explanation, and cancelling asks for confirmation because it also cancels the epic's unfinished stories)
-
-An issues page at `/projects/{id}/issues` lists the project's references to GitHub issues (newest first, filterable by story or "not linked"); issues can be added, edited, linked to or unlinked from any story (finished and cancelled ones included) and removed. Only canonical `github.com` issue URLs are accepted for issues and pull request URLs for pull requests; the server checks that and its message is shown. DProcess stores the link only and never contacts GitHub. Links to GitHub open in a new tab.
-
-Tags are edited on the epic and story pages (the server trims, lower-cases and validates them and its message is shown); a tag chip links to the project board filtered by that tag. Comments are listed oldest first with their author, which is remembered in the browser; they cannot be edited or deleted.
-
-Planned: the remaining work is in the "Quality and release" epic (a browser smoke test, CI) and packaging ( tags, comments, issues and pull requests). All state-transition rules for epics and stories are defined and enforced.
-
 ## Architecture
 
 - Single Go binary: REST API under `/api/v1`, with the built web UI embedded and served by the same process.
@@ -160,6 +141,79 @@ For UI work, run the server in one terminal (`make run`) and `make dev-web` in a
 
 The API is described by `api/openapi.yaml`. The web client types (`web/src/api/schema.d.ts`) are generated from it and committed; edit the spec, run `make gen-api`, and commit both.
 
+## Claude Code plugin
+
+DProcess ships a [Claude Code](https://code.claude.com) plugin, `dprocess`: a suite of skills for working with a DProcess project plan from Claude Code. The skills are meant to run from a clone of this repository, against a running DProcess server.
+
+| Skill | You say | What it does |
+|-------|---------|--------------|
+| `/dprocess:implement-story` | "implement story 27" | Reads the story from the server, implements it on a branch with tests, opens a pull request, merges it when every check passes, and moves the story through its workflow on the server. |
+
+More skills will be added to the same plugin.
+
+### Install
+
+Requirements:
+
+- Claude Code 2.1.275 or newer.
+- A running DProcess server (`make run`). The skill talks to `http://127.0.0.1:8085` unless the environment variable `DPROCESS_URL` says otherwise (the server itself listens on `127.0.0.1:8080` by default, so set `DPROCESS_URL` if you did not change that).
+- Python 3, `git`, `make`, Go and Node.js, as for the project itself, and the GitHub CLI `gh`, signed in, for pull requests.
+- For the browser checks the skill runs on UI stories: `google-chrome`, `sqlite3` and Node.js 22 or newer.
+
+Install from this repository's marketplace, in a Claude Code session:
+
+```
+/plugin marketplace add drightho/dprocess
+/plugin install dprocess@dprocess-marketplace
+```
+
+or in one step: `/plugin install dprocess --marketplace drightho/dprocess`. From a shell the same is `claude plugin marketplace add drightho/dprocess` and `claude plugin install dprocess@dprocess-marketplace`, with `--scope user` (all your projects, the default), `--scope project` (everyone who works in a repository; collaborators still install it themselves) or `--scope local` (only you, in one repository). Then run `/reload-plugins` or start a new session; `/plugin` lists what is installed.
+
+To try it from a clone without installing, start Claude Code with `claude --plugin-dir ./plugins/dprocess` (and `/reload-plugins` after editing the plugin). `claude plugin validate ./plugins/dprocess` checks the manifest.
+
+Update with `claude plugin update dprocess@dprocess-marketplace` (users stay on a plugin version until `version` in `plugins/dprocess/.claude-plugin/plugin.json` changes, so bump it when you change the plugin). Remove with `claude plugin uninstall dprocess@dprocess-marketplace`.
+
+### Use
+
+Open Claude Code in your clone of DProcess and just say what you want:
+
+```
+implement story 27
+work on story #27
+implement the dependency picker story
+/dprocess:implement-story 27
+```
+
+Claude then:
+
+1. looks the story up on the server and runs a preflight: its description and acceptance criteria, its dependencies, and whether its epic allows work to start;
+2. moves the story to `implementation` and creates the branch `story-27-<slug>`;
+3. implements it, with tests, following the conventions in `CLAUDE.md`;
+4. verifies it: `make check`, a test for each acceptance criterion, deliberate-breakage checks, and a real run (headless Chrome against a copy of the database for UI work);
+5. commits, opens a pull request, links it to the story and moves the story to `testing`;
+6. merges the pull request only if every check passed, then moves the story to `finished`, citing the merge commit.
+
+It stops and asks before it moves a `draft` or `review` story forward (that is your approval of the plan), when a dependency is not finished yet, or when your working tree is not clean. It does not finish an epic for you, because that is final; it tells you when the epic is eligible. If a check fails it stops, leaves the story in `implementation`, opens no pull request and says what failed.
+
+Narrow what it does by saying so:
+
+```
+implement story 27 but don't merge     # stops with the pull request open, the story in `testing`
+implement story 27, dry run            # only the preflight, nothing is changed
+```
+
+Status changes always go to the server named by `DPROCESS_URL`, recorded with the actor `claude` (`DPROCESS_ACTOR` changes that). Claude never starts a server of its own for this and never edits the database file.
+
+The skill's helper can also be used by hand:
+
+```sh
+DP="python3 plugins/dprocess/skills/implement-story/scripts/dpstory.py"
+$DP find "landing"                          # look a story up by name
+$DP show 27                                 # detail and preflight
+$DP move 27 implementation --reason "..."   # the server enforces the workflow rules
+$DP epic-status 27                          # can the story's epic be finished now?
+```
+
 ## Layout
 
 ```
@@ -170,6 +224,8 @@ internal/store/          SQLite access, embedded migrations (migrations/*.sql)
 internal/service/        business rules (state transitions)
 internal/workflow/       epic and story state machines
 internal/api/            HTTP handlers, JSON and error helpers, UI/SPA serving
+plugins/dprocess/        the Claude Code plugin (skills/implement-story/, scripts, references)
+.claude-plugin/          marketplace.json: makes this repository an installable plugin marketplace
 ```
 
 ## License

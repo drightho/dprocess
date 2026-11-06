@@ -1,0 +1,12 @@
+{
+  "name": "dprocess",
+  "version": "0.1.0",
+  "description": "Skills for working with a DProcess project plan from Claude Code: implement a story end to end and keep its status on the DProcess server in step.",
+  "author": {
+    "name": "Dright Ho"
+  },
+  "homepage": "https://github.com/drightho/dprocess",
+  "repository": "https://github.com/drightho/dprocess",
+  "license": "MIT",
+  "keywords": ["dprocess", "workflow", "stories", "project-management"]
+}

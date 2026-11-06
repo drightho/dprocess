@@ -56,6 +56,10 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 - Test setup (`src/test/setup.ts`) clears localStorage and restores mocks after every test. Do not use an `<output>` element as a test probe: it has the implicit ARIA role `status`, which the pages also use.
 - Verify layout changes in a real browser, not only with vitest: build with `make web`, run the server, and screenshot with `google-chrome --headless=new --no-sandbox --virtual-time-budget=6000 --screenshot=out.png <url>`.
 
+## Skills
+
+- `plugins/dprocess/` is a Claude Code plugin (marketplace manifest in `.claude-plugin/marketplace.json`; skills are invoked as `/dprocess:<skill>`). Its skill `implement-story` ("implement story 27") reads the story from the DProcess server (`http://127.0.0.1:8085`, or `DPROCESS_URL`), checks it can be started, implements it on a branch with tests, opens a PR, merges it when every check passes and moves the story through implementation, testing and finished. Its helper `skills/implement-story/scripts/dpstory.py` is the only way status is changed; `scripts/e2e-run.sh` + `scripts/cdp.mjs` run browser checks against a copy of the database. Skills must live under `plugins/dprocess/skills/<name>/` (a plugin's skills are one level deep; Claude Code does not scan nested folders in `.claude/skills`), reference their own files through `${CLAUDE_SKILL_DIR}`, run scripts through their interpreter, and use nothing outside the plugin folder (an installed plugin is copied to a cache). Bump `version` in `plugins/dprocess/.claude-plugin/plugin.json` when the plugin changes, and check it with `claude plugin validate ./plugins/dprocess` and `claude plugin validate .`. Keep the skill in step with the workflow rules documented here.
+
 ## Conventions
 
 - Schema changes: add a new numbered file in `internal/store/migrations/` (e.g. `0002_*.sql`); never edit an applied migration. Migrations are embedded and run in order at startup, each in a transaction.
