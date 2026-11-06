@@ -46,6 +46,20 @@ describe("App routes", () => {
     expect((await screen.findByRole("link", { name: "Alpha" })).getAttribute("href")).toBe("/projects/1");
   });
 
+  it("serves the epic page at /epics/:id", async () => {
+    mockApi({
+      "/api/v1/health": { status: "ok" },
+      "/api/v1/epics/3": { ...epic({ id: 3, project_id: 1, name: "Billing", state: "draft" }), allowed_transitions: ["review", "cancelled"] },
+      "/api/v1/epics/3/stories": [story({ id: 9, epic_id: 3, name: "Invoice list" })],
+      "/api/v1/epics/3/history": [],
+      "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
+    });
+    renderAt("/epics/3");
+    expect(await screen.findByRole("heading", { name: "Billing" })).toBeTruthy();
+    expect(screen.getByText("Invoice list")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move to review" })).toBeTruthy();
+  });
+
   it("shows a not-found page for unknown routes", () => {
     mockApi({ "/api/v1/health": { status: "ok" } });
     renderAt("/nowhere");

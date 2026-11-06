@@ -125,3 +125,19 @@ select { font: inherit; padding: 0.35rem 0.5rem; background: var(--bg); color: v
 .search { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; max-width: none; margin-bottom: 0.75rem; }
 .search label { flex: 1 1 14rem; }
 input[type="search"] { font: inherit; padding: 0.4rem 0.6rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+
+.medium { max-width: 64rem; }
+.title { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.title h1 { margin: 0.5rem 0; }
+.card-head { display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; }
+.open-epic { display: inline-block; margin-top: 0.25rem; font-size: 0.85rem; }
+.panel { border: 1px solid var(--border); border-radius: 6px; padding: 0 1rem 1rem; margin: 1rem 0; }
+.panel label { max-width: 32rem; margin-bottom: 0.75rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+button.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+.confirm { border: 1px solid var(--bad); border-radius: 6px; padding: 0 1rem 0.75rem; margin-bottom: 0.5rem; }
+.confirm ul { padding-left: 1.25rem; }
+.history { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.history li { border-left: 3px solid var(--border); padding-left: 0.75rem; }
+.history p { margin: 0.15rem 0 0; }

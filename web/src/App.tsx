@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "./api/client";
+import EpicPage from "./pages/EpicPage";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
+          <Route path="/epics/:epicId" element={<EpicPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
