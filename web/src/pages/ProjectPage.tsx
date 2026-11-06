@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "../api/client";
 import EpicList from "../components/EpicList";
 import FilterBar from "../components/FilterBar";
+import NotFoundNotice from "../components/NotFoundNotice";
 import StoryBoard from "../components/StoryBoard";
 import {
   applyFilters,
@@ -15,17 +16,6 @@ import {
   type Filters,
 } from "../lib/board";
 import { recordVisit } from "../lib/recent";
-
-function NotFound() {
-  return (
-    <section className="narrow">
-      <h1>Project not found</h1>
-      <p>
-        <Link to="/">Back to projects</Link>
-      </p>
-    </section>
-  );
-}
 
 /** Project overview: its epics and a board of its stories grouped by state. */
 export default function ProjectPage() {
@@ -63,10 +53,10 @@ export default function ProjectPage() {
     }
   }, [visitedId, visitedName]);
 
-  if (id === null) return <NotFound />;
+  if (id === null) return <NotFoundNotice what="Project" />;
 
   const error = project.error ?? epics.error ?? stories.error;
-  if (error instanceof ApiError && error.status === 404) return <NotFound />;
+  if (error instanceof ApiError && error.status === 404) return <NotFoundNotice what="Project" />;
   if (error) {
     return (
       <section className="narrow">

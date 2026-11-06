@@ -103,6 +103,16 @@ describe("ProjectPage overview", () => {
     expect(back.getAttribute("href")).toBe("/projects");
   });
 
+  it("links each epic, and each story card's epic name, to the epic page", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    const open = screen.getAllByRole("link", { name: /Open epic/ }).map((a) => a.getAttribute("href"));
+    expect(open).toEqual(["/epics/1", "/epics/2"]);
+    const invoice = screen.getByText("Invoice list").closest("li")!;
+    expect(within(invoice).getByRole("link", { name: "Billing" }).getAttribute("href")).toBe("/epics/2");
+  });
+
   it("requests the project, its epics and its stories once each", async () => {
     const { calls } = mockApi(fullRoutes);
     renderAt("/projects/1");

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { epicProgress, type Epic, type Story } from "../lib/board";
 import StateBadge from "./StateBadge";
 
@@ -47,6 +48,9 @@ export default function EpicList({ epics, stories, selectedEpic, onSelect }: Pro
                 </span>
               )}
             </button>
+            <Link className="open-epic" to={`/epics/${epic.id}`}>
+              Open epic &rarr;
+            </Link>
           </li>
         );
       })}

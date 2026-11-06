@@ -40,6 +40,22 @@ export function story(over: Partial<Story> = {}): Story {
   };
 }
 
+export type HistoryEntry = Schemas["HistoryEntry"];
+
+export function historyEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
+  return {
+    id: 1,
+    entity_type: "epic",
+    entity_id: 1,
+    from_state: "draft",
+    to_state: "review",
+    reason: "",
+    actor: "",
+    at: "2026-01-02T03:04:05.000Z",
+    ...over,
+  };
+}
+
 export type Project = Schemas["Project"];
 
 export function project(over: Partial<Project> = {}): Project {
@@ -57,7 +73,7 @@ export function problem(status: number, title: string, detail: string): Response
   return json({ title, status, detail }, status);
 }
 
-type Route = unknown | Response | ((req: Request) => unknown | Response);
+type Route = unknown | Response | ((req: Request) => unknown | Response | Promise<unknown | Response>);
 
 /**
  * A fetch stand-in that answers by URL path. A route value may be a plain body,
@@ -71,7 +87,7 @@ export function mockApi(routes: Record<string, Route>) {
     calls.push(path);
     let route = routes[path];
     if (route === undefined) return problem(404, "not found", `no route for ${path}`);
-    if (typeof route === "function") route = (route as (r: Request) => unknown)(req);
+    if (typeof route === "function") route = await (route as (r: Request) => unknown)(req);
     return route instanceof Response ? route.clone() : json(route);
   });
   vi.stubGlobal("fetch", fetchMock);
