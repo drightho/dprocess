@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { WARN_LOC, type Story } from "../lib/board";
 import StateBadge from "./StateBadge";
@@ -8,9 +9,11 @@ interface Props {
   epic?: { id: number; name: string };
   /** Show the story's state on the card (the board's columns already say it). */
   showState?: boolean;
+  /** Buttons or notes shown at the bottom of the card. */
+  actions?: ReactNode;
 }
 
-export default function StoryCard({ story, epic, showState = false }: Props) {
+export default function StoryCard({ story, epic, showState = false, actions }: Props) {
   return (
     <li className="card">
       <span className="card-head">
@@ -41,6 +44,7 @@ export default function StoryCard({ story, epic, showState = false }: Props) {
           ))}
         </span>
       )}
+      {actions && <span className="actions">{actions}</span>}
     </li>
   );
 }

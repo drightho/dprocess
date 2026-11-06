@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type Schemas } from "../api/client";
-import type { Epic, Story } from "../lib/board";
+import { isTerminal, type Epic, type Story } from "../lib/board";
 import StateBadge from "./StateBadge";
 
 type EpicState = Schemas["EpicState"];
-
-const isFinal = (s: Story) => s.state === "finished" || s.state === "cancelled";
 
 interface Props {
   epic: Epic;
@@ -65,7 +63,7 @@ export default function TransitionPanel({ epic, stories }: Props) {
     );
   }
 
-  const unfinished = stories.filter((s) => !isFinal(s));
+  const unfinished = stories.filter((s) => !isTerminal(s));
 
   return (
     <section aria-label="Change state" className="panel">

@@ -41,6 +41,7 @@ function renderAt(url: string) {
         <Routes>
           <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="/" element={<p>landing</p>} />
+          <Route path="/epics/:epicId" element={<p>epic page</p>} />
         </Routes>
         <LocationProbe />
       </MemoryRouter>
@@ -324,5 +325,59 @@ describe("ProjectPage visit tracking", () => {
     renderAt("/projects/1");
     expect(await screen.findByRole("heading", { name: "Alpha" })).toBeTruthy();
     await waitFor(() => expect(blocked).toHaveBeenCalled()); // recording a visit hit the blocked storage
+  });
+});
+
+describe("ProjectPage new epic", () => {
+  const withCreate = (answer: (body: Record<string, unknown>) => Response) => {
+    const writes: Record<string, unknown>[] = [];
+    mockApi({
+      ...fullRoutes,
+      "/api/v1/projects/1/epics": async (req: Request) => {
+        if (req.method !== "POST") return epics;
+        const body = (await req.json()) as Record<string, unknown>;
+        writes.push(body);
+        return answer(body);
+      },
+    });
+    return writes;
+  };
+
+  it("creates an epic and opens it", async () => {
+    const writes = withCreate(() => json(epic({ id: 9, project_id: 1, name: "Reports" }), 201));
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+
+    expect(screen.queryByRole("form", { name: "New epic" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New epic" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Reports" } });
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Monthly reports" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create epic" }));
+
+    await waitFor(() => expect(location()).toBe("/epics/9"));
+    expect(screen.getByText("epic page")).toBeTruthy();
+    expect(writes).toEqual([{ name: "Reports", description: "Monthly reports" }]);
+  });
+
+  it("shows the server's message next to the form and stays on the page", async () => {
+    withCreate(() => problem(422, "validation failed", "name is required"));
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    fireEvent.click(screen.getByRole("button", { name: "New epic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create epic" }));
+    const form = screen.getByRole("form", { name: "New epic" });
+    expect((await within(form).findByRole("alert")).textContent).toContain("name is required");
+    expect(location()).toBe("/projects/1");
+  });
+
+  it("can be cancelled", async () => {
+    const writes = withCreate(() => json(epic(), 201));
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    fireEvent.click(screen.getByRole("button", { name: "New epic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: "New epic" })).toBeNull();
+    expect(screen.getByRole("button", { name: "New epic" })).toBeTruthy();
+    expect(writes).toHaveLength(0);
   });
 });

@@ -19,9 +19,9 @@ Work in progress. Implemented so far:
 - Story dependencies with same-project and cycle checks
 - Tags and comments on epics and stories; GitHub issue references; GitHub pull request links on stories
 - OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
-- Web UI (React + TypeScript + Vite) embedded in the binary: a landing page at `/` (find a project by exact name, the 10 most recently visited projects, create a project), the list of all projects at `/projects`, a project overview page at `/projects/{id}` (epics with state and progress, and a story board with one column per state, filterable by epic, assignee and tag), and an epic page at `/epics/{id}` (its stories and state history, and buttons for the moves the server allows; a refused move shows the server's explanation, and cancelling asks for confirmation because it also cancels the epic's unfinished stories)
+- Web UI (React + TypeScript + Vite) embedded in the binary: a landing page at `/` (find a project by exact name, the 10 most recently visited projects, create a project), the list of all projects at `/projects`, a project overview page at `/projects/{id}` (epics with state and progress, and a story board with one column per state, filterable by epic, assignee and tag), forms to create and edit epics and stories (a "New epic" form on the project page; "Edit epic", "New story" and per-story "Edit" on the epic page; the size estimate warns live above 400 lines, server validation messages appear inside the form, and finished or cancelled stories are shown read-only), and an epic page at `/epics/{id}` (its stories and state history, and buttons for the moves the server allows; a refused move shows the server's explanation, and cancelling asks for confirmation because it also cancels the epic's unfinished stories)
 
-Planned: the rest of the web UI (story page with transitions, create/edit forms, dependencies, tags, comments, issues and pull requests). All state-transition rules for epics and stories are defined and enforced.
+Planned: the rest of the web UI (story page with transitions, dependencies, tags, comments, issues and pull requests). All state-transition rules for epics and stories are defined and enforced.
 
 ## Architecture
 

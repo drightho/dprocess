@@ -15,6 +15,9 @@ export const STORY_STATES: readonly StoryState[] = [
   "cancelled",
 ];
 
+/** Finished and cancelled stories are frozen: the server refuses to modify them. */
+export const isTerminal = (s: Story): boolean => s.state === "finished" || s.state === "cancelled";
+
 /** Warning the server attaches to stories estimated above 400 lines. */
 export const WARN_LOC = "estimate_exceeds_400_loc";
 
