@@ -119,6 +119,13 @@ An epic's or story's state cannot be changed with PATCH, only through `transitio
 - A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation` and `testing`.) Cancelling is never gated.
 - A story can move to `finished` only when every story it depends on is `finished`. A cancelled dependency does not count; remove the dependency or cancel the story instead.
 
+**Finished and cancelled stories are frozen.** They cannot be modified (409):
+
+- Editing a story's fields (`PATCH`) is rejected.
+- Adding a dependency to such a story, or removing one from it, is rejected. A live story may still depend on a finished or cancelled story, and a live story may always drop a dependency, including one on a cancelled story.
+- A `finished` story cannot be deleted. A `cancelled` story can be (unless other stories still depend on it).
+- Tags, comments and GitHub issue links are not part of the freeze and stay open on finished and cancelled stories.
+
 Errors are returned as `application/problem+json` documents (`title`, `status`, `detail`):
 
 | Status | Meaning                                                       |

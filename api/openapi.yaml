@@ -426,7 +426,8 @@ paths:
       operationId: updateStory
       description: >
         Absent fields are unchanged. estimate_loc: null clears the estimate.
-        State changes use the transition endpoint.
+        State changes use the transition endpoint. Finished and cancelled
+        stories cannot be modified (409).
       requestBody:
         required: true
         content:
@@ -440,11 +441,15 @@ paths:
               schema: { $ref: "#/components/schemas/Story" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
     delete:
       tags: [Stories]
       operationId: deleteStory
-      summary: Delete a story (409 while other stories depend on it)
+      summary: Delete a story
+      description: >
+        409 for a finished story (finished work is kept) and while other
+        stories depend on it. Cancelled stories can be deleted.
       responses:
         "204": { description: Deleted }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -513,6 +518,8 @@ paths:
       description: >
         Both stories must belong to the same project and be different (422);
         the dependency must not create a cycle, direct or transitive (409).
+        The depending story ({id}) must not be finished or cancelled (409);
+        the story it points at may be in any state.
       responses:
         "200":
           description: The story with its relations
@@ -525,9 +532,14 @@ paths:
     delete:
       tags: [Dependencies]
       operationId: removeDependency
+      description: >
+        Allowed in every state of the depended-on story, a cancelled one
+        included, which is how a story is freed from a cancelled dependency.
+        409 when the depending story ({id}) is finished or cancelled.
       responses:
         "204": { description: Removed }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /stories/{id}/tags/{tag}:
     parameters:

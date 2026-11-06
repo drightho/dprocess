@@ -246,11 +246,14 @@ export interface paths {
         get: operations["getStory"];
         put?: never;
         post?: never;
-        /** Delete a story (409 while other stories depend on it) */
+        /**
+         * Delete a story
+         * @description 409 for a finished story (finished work is kept) and while other stories depend on it. Cancelled stories can be deleted.
+         */
         delete: operations["deleteStory"];
         options?: never;
         head?: never;
-        /** @description Absent fields are unchanged. estimate_loc: null clears the estimate. State changes use the transition endpoint. */
+        /** @description Absent fields are unchanged. estimate_loc: null clears the estimate. State changes use the transition endpoint. Finished and cancelled stories cannot be modified (409). */
         patch: operations["updateStory"];
         trace?: never;
     };
@@ -308,10 +311,11 @@ export interface paths {
         get?: never;
         /**
          * Make the story depend on another one (idempotent)
-         * @description Both stories must belong to the same project and be different (422); the dependency must not create a cycle, direct or transitive (409).
+         * @description Both stories must belong to the same project and be different (422); the dependency must not create a cycle, direct or transitive (409). The depending story ({id}) must not be finished or cancelled (409); the story it points at may be in any state.
          */
         put: operations["addDependency"];
         post?: never;
+        /** @description Allowed in every state of the depended-on story, a cancelled one included, which is how a story is freed from a cancelled dependency. 409 when the depending story ({id}) is finished or cancelled. */
         delete: operations["removeDependency"];
         options?: never;
         head?: never;
@@ -1251,6 +1255,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };
@@ -1355,6 +1360,7 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     addStoryTag: {

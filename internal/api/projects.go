@@ -35,7 +35,7 @@ func storeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found", err.Error())
 	case errors.Is(err, store.ErrInUse), errors.Is(err, store.ErrCycle), errors.Is(err, store.ErrDuplicate),
-		errors.Is(err, store.ErrEpicClosed), errors.Is(err, service.ErrTransitionBlocked),
+		errors.Is(err, store.ErrEpicClosed), errors.Is(err, store.ErrStoryLocked), errors.Is(err, service.ErrTransitionBlocked),
 		errors.Is(err, workflow.ErrIllegalTransition):
 		writeError(w, http.StatusConflict, "conflict", err.Error())
 	case errors.Is(err, workflow.ErrUnknownState), errors.Is(err, store.ErrSelfDependency),

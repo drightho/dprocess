@@ -166,7 +166,20 @@ func (s *Store) queryStories(q string, args ...any) ([]*Story, error) {
 	return out, nil
 }
 
+// ErrStoryLocked is returned when a finished or cancelled story is modified.
+var ErrStoryLocked = errors.New("story is finished or cancelled and cannot be modified")
+
+// terminalStories is the SQL list of states in which a story is frozen.
+const terminalStories = `('finished', 'cancelled')`
+
+// lockedErr explains why a story cannot be modified.
+func lockedErr(id int64, state string) error {
+	return fmt.Errorf("story %d is %s: %w", id, state, ErrStoryLocked)
+}
+
 // UpdateStory applies a patch. State changes only via TransitionStory.
+// Finished and cancelled stories cannot be modified (ErrStoryLocked); the
+// check and the update are one atomic statement.
 func (s *Store) UpdateStory(id int64, p StoryPatch) (*Story, error) {
 	res, err := s.DB.Exec(`UPDATE stories SET
 		name = COALESCE(?, name),
@@ -175,19 +188,24 @@ func (s *Store) UpdateStory(id int64, p StoryPatch) (*Story, error) {
 		assignee = COALESCE(?, assignee),
 		estimate_loc = CASE WHEN ? THEN ? ELSE estimate_loc END,
 		updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-		WHERE id = ?`,
+		WHERE id = ? AND state NOT IN `+terminalStories,
 		p.Name, p.Description, p.AcceptanceCriteria, p.Assignee, p.EstimateSet, p.EstimateLOC, id)
 	if err != nil {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, ErrNotFound
+		st, err := s.GetStory(id)
+		if err != nil {
+			return nil, err // ErrNotFound
+		}
+		return nil, lockedErr(id, st.State)
 	}
 	return s.GetStory(id)
 }
 
 // DeleteStory removes a story with its history, comments, tags and its own
-// dependency edges. It fails with ErrInUse while other stories depend on it.
+// dependency edges. It fails with ErrStoryLocked for a finished story and
+// with ErrInUse while other stories depend on it.
 func (s *Store) DeleteStory(id int64) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -195,6 +213,16 @@ func (s *Store) DeleteStory(id int64) error {
 	}
 	defer tx.Rollback()
 
+	var state string
+	if err := tx.QueryRow(`SELECT state FROM stories WHERE id = ?`, id).Scan(&state); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if state == "finished" { // finished work stays on record; cancelled stories may be removed
+		return lockedErr(id, state)
+	}
 	var dependents int
 	if err := tx.QueryRow(`SELECT count(*) FROM story_dependencies WHERE depends_on_id = ?`, id).Scan(&dependents); err != nil {
 		return err

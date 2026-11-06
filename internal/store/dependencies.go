@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 )
@@ -30,18 +31,17 @@ func (s *Store) AddDependency(storyID, dependsOnID int64) error {
 	}
 	defer tx.Rollback()
 
-	projectOf := func(id int64) (int64, error) {
-		var p int64
-		if err := tx.QueryRow(`SELECT project_id FROM stories WHERE id = ?`, id).Scan(&p); err != nil {
-			return 0, ErrNotFound
+	info := func(id int64) (project int64, state string, err error) {
+		if err := tx.QueryRow(`SELECT project_id, state FROM stories WHERE id = ?`, id).Scan(&project, &state); err != nil {
+			return 0, "", ErrNotFound
 		}
-		return p, nil
+		return project, state, nil
 	}
-	sp, err := projectOf(storyID)
+	sp, sstate, err := info(storyID)
 	if err != nil {
 		return fmt.Errorf("story %d: %w", storyID, err)
 	}
-	dp, err := projectOf(dependsOnID)
+	dp, _, err := info(dependsOnID)
 	if err != nil {
 		return fmt.Errorf("story %d: %w", dependsOnID, err)
 	}
@@ -50,6 +50,11 @@ func (s *Store) AddDependency(storyID, dependsOnID int64) error {
 	}
 	if sp != dp {
 		return fmt.Errorf("stories %d and %d: %w", storyID, dependsOnID, ErrCrossProject)
+	}
+	// Adding a dependency modifies the depending story, so it must not be final.
+	// (The story it points at may be in any state.)
+	if sstate == "finished" || sstate == "cancelled" {
+		return lockedErr(storyID, sstate)
 	}
 
 	// A cycle appears if dependsOnID already (transitively) depends on storyID.
@@ -72,17 +77,35 @@ func (s *Store) AddDependency(storyID, dependsOnID int64) error {
 	return tx.Commit()
 }
 
-// RemoveDependency deletes a dependency edge; ErrNotFound if it does not exist.
+// RemoveDependency deletes a dependency edge; ErrNotFound if it does not
+// exist. It modifies the depending story, so it fails with ErrStoryLocked when
+// that story is finished or cancelled. The story it pointed at may be in any
+// state, a cancelled one included: this is how a story is freed from a
+// cancelled dependency.
 func (s *Store) RemoveDependency(storyID, dependsOnID int64) error {
-	res, err := s.DB.Exec(`DELETE FROM story_dependencies WHERE story_id = ? AND depends_on_id = ?`,
-		storyID, dependsOnID)
+	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	defer tx.Rollback()
+
+	var state string
+	err = tx.QueryRow(`SELECT st.state FROM story_dependencies d JOIN stories st ON st.id = d.story_id
+		WHERE d.story_id = ? AND d.depends_on_id = ?`, storyID, dependsOnID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("story %d does not depend on %d: %w", storyID, dependsOnID, ErrNotFound)
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if state == "finished" || state == "cancelled" {
+		return lockedErr(storyID, state)
+	}
+	if _, err := tx.Exec(`DELETE FROM story_dependencies WHERE story_id = ? AND depends_on_id = ?`,
+		storyID, dependsOnID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ListDependencies returns the stories that storyID depends on.
