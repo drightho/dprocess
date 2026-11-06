@@ -1,36 +1,20 @@
-import { useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, unwrap } from "../api/client";
 
+/** Every project, for browsing. Creating one and searching live on the landing page. */
 export default function ProjectsPage() {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-
   const projects = useQuery({
     queryKey: ["projects"],
     queryFn: () => unwrap(api.GET("/projects")),
   });
 
-  const create = useMutation({
-    mutationFn: () =>
-      unwrap(api.POST("/projects", { body: { name, description } })),
-    onSuccess: async () => {
-      setName("");
-      setDescription("");
-      await queryClient.invalidateQueries({ queryKey: ["projects"] });
-    },
-  });
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    create.mutate();
-  }
-
   return (
     <section className="narrow">
-      <h1>Projects</h1>
+      <p>
+        <Link to="/">&larr; Home</Link>
+      </p>
+      <h1>All projects</h1>
 
       {projects.isPending && <p>Loading...</p>}
       {projects.isError && (
@@ -38,7 +22,7 @@ export default function ProjectsPage() {
           Could not load projects: {projects.error.message}
         </p>
       )}
-      {projects.data?.length === 0 && <p>No projects yet.</p>}
+      {projects.data?.length === 0 && <p className="empty">No projects yet. Create one from the home page.</p>}
       <ul className="cards">
         {projects.data?.map((p) => (
           <li key={p.id}>
@@ -49,29 +33,6 @@ export default function ProjectsPage() {
           </li>
         ))}
       </ul>
-
-      <h2>New project</h2>
-      <form onSubmit={submit}>
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label>
-          Description
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </label>
-        {create.isError && (
-          <p role="alert" className="error">
-            {create.error.message}
-          </p>
-        )}
-        <button type="submit" disabled={create.isPending}>
-          Create project
-        </button>
-      </form>
     </section>
   );
 }

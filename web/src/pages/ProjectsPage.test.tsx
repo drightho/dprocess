@@ -1,14 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import ProjectsPage from "./ProjectsPage";
-
-function json(body: unknown, status = 200, type = "application/json") {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": type },
-  });
-}
+import { mockApi, problem, project } from "../test/fixtures";
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,48 +15,33 @@ function renderPage() {
   );
 }
 
-afterEach(() => vi.unstubAllGlobals());
-
-describe("ProjectsPage", () => {
-  it("lists projects from the API", async () => {
-    const fetchMock = vi.fn(async (_req: Request) =>
-      json([
-        {
-          id: 1,
-          name: "Alpha",
-          description: "first",
-          created_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:00Z",
-        },
-      ]),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+describe("ProjectsPage (all projects)", () => {
+  it("lists every project, each linking to its overview", async () => {
+    const { calls } = mockApi({
+      "/api/v1/projects": [project({ id: 1, name: "Alpha", description: "first" }), project({ id: 2, name: "Beta" })],
+    });
     renderPage();
-    expect(await screen.findByText("Alpha")).toBeTruthy();
-    // Each project links to its overview page.
+    expect(await screen.findByText("first")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("/projects/1");
-    const req = fetchMock.mock.calls[0][0];
-    expect(new URL(req.url).pathname).toBe("/api/v1/projects");
+    expect(screen.getByRole("link", { name: "Beta" }).getAttribute("href")).toBe("/projects/2");
+    expect(calls).toEqual(["/api/v1/projects"]);
   });
 
-  it("shows the server's problem detail when creating fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (req: Request) =>
-        req.method === "POST"
-          ? json(
-              { title: "validation failed", status: 422, detail: "name is required" },
-              422,
-              "application/problem+json",
-            )
-          : json([]),
-      ),
-    );
+  it("links back to the home page", async () => {
+    mockApi({ "/api/v1/projects": [] });
     renderPage();
-    await screen.findByText("No projects yet.");
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain("name is required"),
-    );
+    expect((await screen.findByRole("link", { name: /Home/ })).getAttribute("href")).toBe("/");
+  });
+
+  it("says so when there are no projects", async () => {
+    mockApi({ "/api/v1/projects": [] });
+    renderPage();
+    expect(await screen.findByText(/No projects yet/)).toBeTruthy();
+  });
+
+  it("shows the server's message when loading fails", async () => {
+    mockApi({ "/api/v1/projects": problem(500, "internal error", "database is on fire") });
+    renderPage();
+    expect((await screen.findByRole("alert")).textContent).toContain("database is on fire");
   });
 });

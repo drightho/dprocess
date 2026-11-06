@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "../api/client";
@@ -13,6 +14,7 @@ import {
   writeFilters,
   type Filters,
 } from "../lib/board";
+import { recordVisit } from "../lib/recent";
 
 function NotFound() {
   return (
@@ -51,6 +53,16 @@ export default function ProjectPage() {
     queryFn: () => unwrap(api.GET("/projects/{id}/stories", { params: { path: { id: id! } } })),
   });
 
+  // Opening a project counts as a visit (it feeds the landing page's recent list).
+  // Only a project that loaded is recorded, never an unknown or malformed id.
+  const visitedId = project.data?.id;
+  const visitedName = project.data?.name;
+  useEffect(() => {
+    if (visitedId !== undefined && visitedName !== undefined) {
+      recordVisit({ id: visitedId, name: visitedName });
+    }
+  }, [visitedId, visitedName]);
+
   if (id === null) return <NotFound />;
 
   const error = project.error ?? epics.error ?? stories.error;
@@ -84,7 +96,7 @@ export default function ProjectPage() {
   return (
     <>
       <p>
-        <Link to="/">&larr; All projects</Link>
+        <Link to="/projects">&larr; All projects</Link>
       </p>
       <h1>{project.data.name}</h1>
       {project.data.description && <p className="meta">{project.data.description}</p>}

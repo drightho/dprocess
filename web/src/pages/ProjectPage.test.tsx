@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import ProjectPage from "./ProjectPage";
+import { RECENT_KEY, readRecent } from "../lib/recent";
 import { epic, json, mockApi, problem, story } from "../test/fixtures";
 
 const project = {
@@ -29,7 +30,7 @@ const fullRoutes = {
 
 function LocationProbe() {
   const l = useLocation();
-  return <output data-testid="location">{l.pathname + l.search}</output>;
+  return <span data-testid="location">{l.pathname + l.search}</span>;
 }
 
 function renderAt(url: string) {
@@ -95,11 +96,11 @@ describe("ProjectPage overview", () => {
     expect(screen.getByText("Login").closest("li")!.textContent).not.toContain("over 400");
   });
 
-  it("links back to the project list", async () => {
+  it("links back to the list of all projects", async () => {
     mockApi(fullRoutes);
     renderAt("/projects/1");
     const back = await screen.findByRole("link", { name: /All projects/ });
-    expect(back.getAttribute("href")).toBe("/");
+    expect(back.getAttribute("href")).toBe("/projects");
   });
 
   it("requests the project, its epics and its stories once each", async () => {
@@ -264,5 +265,54 @@ describe("ProjectPage empty and error states", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ title: "bad gateway", status: 502, detail: "upstream down" }, 502)));
     renderAt("/projects/1");
     expect((await screen.findByRole("alert")).textContent).toContain("upstream down");
+  });
+});
+
+describe("ProjectPage visit tracking", () => {
+  it("records a visit once the project has loaded", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    await waitFor(() => expect(readRecent().map((r) => [r.id, r.name])).toEqual([[1, "Alpha"]]));
+    expect(JSON.parse(localStorage.getItem(RECENT_KEY)!)[0].visitedAt).toMatch(/^\d{4}-\d\d-\d\dT/);
+  });
+
+  it("moves the project to the top, without a duplicate, and refreshes its name", async () => {
+    localStorage.setItem(
+      RECENT_KEY,
+      JSON.stringify([
+        { id: 2, name: "Other", visitedAt: "2026-01-02T00:00:00.000Z" },
+        { id: 1, name: "Old name", visitedAt: "2026-01-01T00:00:00.000Z" },
+      ]),
+    );
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    await waitFor(() => expect(readRecent().map((r) => [r.id, r.name])).toEqual([[1, "Alpha"], [2, "Other"]]));
+  });
+
+  it("does not record an unknown or malformed project", async () => {
+    mockApi({
+      "/api/v1/projects/9": problem(404, "not found", "project 9: not found"),
+      "/api/v1/projects/9/epics": problem(404, "not found", "x"),
+      "/api/v1/projects/9/stories": problem(404, "not found", "x"),
+    });
+    const { unmount } = renderAt("/projects/9");
+    await screen.findByRole("heading", { name: "Project not found" });
+    unmount();
+    renderAt("/projects/abc");
+    expect(screen.getByRole("heading", { name: "Project not found" })).toBeTruthy();
+    expect(readRecent()).toEqual([]);
+    expect(localStorage.getItem(RECENT_KEY)).toBeNull();
+  });
+
+  it("still works when localStorage is blocked", async () => {
+    const blocked = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    expect(await screen.findByRole("heading", { name: "Alpha" })).toBeTruthy();
+    await waitFor(() => expect(blocked).toHaveBeenCalled()); // recording a visit hit the blocked storage
   });
 });
