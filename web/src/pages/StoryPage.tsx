@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError, unwrap, type Schemas } from "../api/client";
+import { api, ApiError, unwrap } from "../api/client";
+import DependencySection from "../components/DependencySection";
 import HistoryList from "../components/HistoryList";
 import NotFoundNotice from "../components/NotFoundNotice";
 import StateBadge from "../components/StateBadge";
@@ -9,23 +10,6 @@ import StoryForm from "../components/StoryForm";
 import StoryTransitionPanel from "../components/StoryTransitionPanel";
 import { isTerminal, WARN_LOC } from "../lib/board";
 
-type StoryRef = Schemas["StoryRef"];
-
-function Refs({ items, none }: { items: readonly StoryRef[]; none: string }) {
-  if (items.length === 0) return <p className="empty">{none}</p>;
-  return (
-    <ul className="refs">
-      {items.map((r) => (
-        <li key={r.id}>
-          <Link to={`/stories/${r.id}`}>
-            #{r.id} {r.name}
-          </Link>{" "}
-          <StateBadge state={r.state} />
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /** One story: its fields, how to move it between states, its dependencies and its history. */
 export default function StoryPage() {
@@ -136,11 +120,7 @@ export default function StoryPage() {
 
       <StoryTransitionPanel story={s} />
 
-      <h2>Dependencies</h2>
-      <h3 className="sub">Depends on</h3>
-      <Refs items={s.depends_on} none="This story depends on no other story." />
-      <h3 className="sub">Required by</h3>
-      <Refs items={s.dependents} none="No story depends on this one." />
+      <DependencySection story={s} />
 
       <h2>History</h2>
       {history.isError ? (
