@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import StoryPage from "./StoryPage";
-import { comment, epic, historyEntry, json, mockApi, problem, story, storyDetail, storyRef, type Comment, type HistoryEntry, type Story, type StoryDetail } from "../test/fixtures";
+import { comment, epic, historyEntry, issue, json, mockApi, problem, pullRequest, story, storyDetail, storyRef, type Comment, type HistoryEntry, type Story, type StoryDetail } from "../test/fixtures";
 
 type StoryState = StoryDetail["state"];
 
@@ -26,6 +26,8 @@ interface Setup {
   others?: Story[];
   /** Answer the dependency endpoints with this instead of applying the change. */
   dependency?: (method: string, id: number) => Response | undefined;
+  /** Answer a pull request removal with this instead of applying it. */
+  removePullRequest?: (id: number) => Response | undefined;
 }
 
 /** A small stateful fake of the story endpoints: a successful write changes what the next GET returns. */
@@ -39,6 +41,8 @@ function setup(init: Setup = {}) {
     tagCalls: [] as string[],
     comments: [] as Comment[],
     commentPosts: [] as Record<string, unknown>[],
+    prWrites: [] as { method: string; body: unknown }[],
+    issueWrites: [] as { id: number; body: unknown }[],
   };
   const others = init.others ?? [];
   const view = () => ({ ...w.story, allowed_transitions: allowed[w.story.state as StoryState] });
@@ -84,6 +88,40 @@ function setup(init: Setup = {}) {
       w.comments = [...w.comments, created];
       return json(created, 201);
     },
+    // Pull requests: only canonical github.com pull request URLs, no duplicates (like the real server).
+    "/api/v1/stories/1/pull-requests": async (req: Request) => {
+      const body = (await req.json()) as { github_url: string };
+      w.prWrites.push({ method: "POST", body });
+      const m = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)$/.exec(body.github_url);
+      if (!m) return problem(422, "validation failed", `invalid GitHub pull request URL: expected https://github.com/{owner}/{repo}/pull/{number} (got ${body.github_url})`);
+      if (w.story.pull_requests.some((p) => p.github_url === body.github_url)) return problem(409, "conflict", "pull request is already linked: already exists");
+      const created = pullRequest({ id: Math.max(0, ...w.story.pull_requests.map((p) => p.id)) + 1, github_url: body.github_url, github_repo: `${m[1]}/${m[2]}`, number: Number(m[3]) });
+      w.story = { ...w.story, pull_requests: [...w.story.pull_requests, created] };
+      return json(created, 201);
+    },
+    ...Object.fromEntries(
+      [1, 2, 3, 4, 5].map((n) => [
+        `/api/v1/stories/1/pull-requests/${n}`,
+        async (req: Request) => {
+          w.prWrites.push({ method: req.method, body: n });
+          const refused = init.removePullRequest?.(n);
+          if (refused) return refused;
+          w.story = { ...w.story, pull_requests: w.story.pull_requests.filter((p) => p.id !== n) };
+          return new Response(null, { status: 204 });
+        },
+      ]),
+    ),
+    // Unlinking an issue: PATCH /issues/{n} with story_id null.
+    ...Object.fromEntries(
+      [1, 2, 3].map((n) => [
+        `/api/v1/issues/${n}`,
+        async (req: Request) => {
+          w.issueWrites.push({ id: n, body: await req.json() });
+          w.story = { ...w.story, issues: w.story.issues.filter((i) => i.id !== n) };
+          return issue({ id: n, story_id: null });
+        },
+      ]),
+    ),
     // Tags: "newtag" can be added, "backend" removed.
     "/api/v1/stories/1/tags/newtag": async (req: Request) => {
       w.tagCalls.push(req.method);
@@ -686,6 +724,159 @@ describe("StoryPage tags and comments", () => {
       const thread = await screen.findByRole("list", { name: "Comment thread" });
       expect(thread.textContent).toContain("Retrospective note");
       expect(w.commentPosts).toEqual([{ body: "Retrospective note", author: "ann" }]);
+    });
+  }
+});
+
+describe("StoryPage pull requests", () => {
+  const prs = [pullRequest({ id: 1, github_repo: "acme/widgets", number: 7, github_url: "https://github.com/acme/widgets/pull/7" }), pullRequest({ id: 2, github_repo: "acme/gadgets", number: 12, github_url: "https://github.com/acme/gadgets/pull/12" })];
+  const section = () => screen.getByRole("region", { name: "Pull requests" });
+  const urlField = () => screen.getByLabelText("GitHub pull request URL") as HTMLInputElement;
+  const link = () => screen.getByRole("button", { name: "Link pull request" }) as HTMLButtonElement;
+
+  it("lists the pull requests as links to GitHub, each removable", async () => {
+    setup({ story: { state: "design", pull_requests: prs } });
+    renderAt();
+    await loaded();
+    const first = within(section()).getByRole("link", { name: "acme/widgets#7" });
+    expect(first.getAttribute("href")).toBe("https://github.com/acme/widgets/pull/7");
+    expect(first.getAttribute("target")).toBe("_blank");
+    expect(first.getAttribute("rel")).toContain("noopener");
+    expect(within(section()).getAllByRole("button", { name: /^Remove pull request/ })).toHaveLength(2);
+  });
+
+  it("says when there are none", async () => {
+    setup({ story: { state: "design" } });
+    renderAt();
+    await loaded();
+    expect(within(section()).getByText("No pull requests linked.")).toBeTruthy();
+  });
+
+  it("links a pull request, clears the field and shows the new one", async () => {
+    const { w } = setup({ story: { state: "implementation" } });
+    renderAt();
+    await loaded();
+    expect(link().disabled).toBe(true); // nothing typed
+    fireEvent.change(urlField(), { target: { value: "https://github.com/acme/widgets/pull/99" } });
+    fireEvent.click(link());
+    await waitFor(() => expect(within(section()).getByRole("link", { name: "acme/widgets#99" })).toBeTruthy());
+    expect(w.prWrites).toEqual([{ method: "POST", body: { github_url: "https://github.com/acme/widgets/pull/99" } }]);
+    expect(urlField().value).toBe("");
+  });
+
+  it("shows the server's message when the URL is refused, keeps the text, and dismisses it when typing", async () => {
+    const { w } = setup({ story: { state: "implementation" } });
+    renderAt();
+    await loaded();
+    fireEvent.change(urlField(), { target: { value: "https://github.com/acme/widgets/issues/5" } }); // an issue, not a PR
+    fireEvent.click(link());
+    expect((await within(section()).findByRole("alert")).textContent).toContain("invalid GitHub pull request URL");
+    expect(urlField().value).toBe("https://github.com/acme/widgets/issues/5");
+    expect(w.story.pull_requests).toHaveLength(0);
+    fireEvent.change(urlField(), { target: { value: "https://github.com/acme/widgets/pull/5" } });
+    expect(within(section()).queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the server's message for a duplicate", async () => {
+    setup({ story: { state: "implementation", pull_requests: prs } });
+    renderAt();
+    await loaded();
+    fireEvent.change(urlField(), { target: { value: "https://github.com/acme/widgets/pull/7" } });
+    fireEvent.click(link());
+    expect((await within(section()).findByRole("alert")).textContent).toContain("already");
+  });
+
+  it("removes a pull request", async () => {
+    const { w } = setup({ story: { state: "implementation", pull_requests: prs } });
+    renderAt();
+    await loaded();
+    fireEvent.click(within(section()).getByRole("button", { name: "Remove pull request acme/widgets#7" }));
+    await waitFor(() => expect(within(section()).queryByRole("link", { name: "acme/widgets#7" })).toBeNull());
+    expect(within(section()).getByRole("link", { name: "acme/gadgets#12" })).toBeTruthy();
+    expect(w.prWrites).toEqual([{ method: "DELETE", body: 1 }]);
+  });
+
+  it("shows the server's message when removing fails", async () => {
+    setup({ story: { state: "implementation", pull_requests: prs }, removePullRequest: () => problem(500, "internal error", "database is on fire") });
+    renderAt();
+    await loaded();
+    fireEvent.click(within(section()).getByRole("button", { name: "Remove pull request acme/widgets#7" }));
+    expect((await within(section()).findByRole("alert")).textContent).toContain("database is on fire");
+    expect(within(section()).getByRole("link", { name: "acme/widgets#7" })).toBeTruthy();
+  });
+
+  for (const state of ["finished", "cancelled"] as const) {
+    it(`is read-only on a ${state} story: the links are shown, nothing can be added or removed`, async () => {
+      setup({ story: { state, pull_requests: prs } });
+      renderAt();
+      await loaded();
+      expect(within(section()).getByRole("link", { name: "acme/widgets#7" })).toBeTruthy();
+      expect(within(section()).getByRole("link", { name: "acme/gadgets#12" })).toBeTruthy();
+      expect(within(section()).queryAllByRole("button")).toHaveLength(0);
+      expect(screen.queryByRole("form", { name: "Link pull request" })).toBeNull();
+      expect(within(section()).getByText(`The pull request links of a ${state} story can no longer be changed.`)).toBeTruthy();
+    });
+  }
+
+  it("refreshes the story after a change", async () => {
+    setup({ story: { state: "implementation" } });
+    const { client } = renderAt();
+    await loaded();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.change(urlField(), { target: { value: "https://github.com/acme/widgets/pull/3" } });
+    fireEvent.click(link());
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(invalidate.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey))).toContain('["story",1]');
+  });
+});
+
+describe("StoryPage issues", () => {
+  const issues = [
+    issue({ id: 1, story_id: 1, github_repo: "acme/widgets", number: 42, title: "Crash on save", kind: "bug", github_url: "https://github.com/acme/widgets/issues/42" }),
+    issue({ id: 2, story_id: 1, github_repo: "acme/widgets", number: 43, github_url: "https://github.com/acme/widgets/issues/43" }),
+  ];
+  const section = () => screen.getByRole("region", { name: "Issues" });
+
+  it("lists the linked issues with a link to GitHub, title and kind, and a link to manage them", async () => {
+    setup({ story: { state: "design", issues } });
+    renderAt();
+    await loaded();
+    const first = within(section()).getByRole("link", { name: "acme/widgets#42" });
+    expect(first.getAttribute("href")).toBe("https://github.com/acme/widgets/issues/42");
+    expect(first.getAttribute("target")).toBe("_blank");
+    expect(first.closest("li")!.textContent).toContain("Crash on save");
+    expect(first.closest("li")!.textContent).toContain("bug");
+    expect(within(section()).getByRole("link", { name: "Manage this project's issues" }).getAttribute("href")).toBe("/projects/1/issues?story=1");
+  });
+
+  it("says when no issue is linked", async () => {
+    setup({ story: { state: "design" } });
+    renderAt();
+    await loaded();
+    expect(within(section()).getByText("No issues linked.")).toBeTruthy();
+  });
+
+  it("unlinks an issue and refreshes the story and the project", async () => {
+    const { w } = setup({ story: { state: "design", issues } });
+    const { client } = renderAt();
+    await loaded();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    fireEvent.click(within(section()).getByRole("button", { name: "Unlink issue acme/widgets#42" }));
+    await waitFor(() => expect(within(section()).queryByRole("link", { name: "acme/widgets#42" })).toBeNull());
+    expect(w.issueWrites).toEqual([{ id: 1, body: { story_id: null } }]);
+    expect(within(section()).getByRole("link", { name: "acme/widgets#43" })).toBeTruthy();
+    const keys = invalidate.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+    expect(keys).toEqual(expect.arrayContaining(['["story"]', '["project",1]']));
+  });
+
+  for (const state of ["finished", "cancelled"] as const) {
+    it(`keeps issue links open on a ${state} story (unlike pull requests)`, async () => {
+      const { w } = setup({ story: { state, issues } });
+      renderAt();
+      await loaded();
+      fireEvent.click(within(section()).getByRole("button", { name: "Unlink issue acme/widgets#43" }));
+      await waitFor(() => expect(within(section()).queryByRole("link", { name: "acme/widgets#43" })).toBeNull());
+      expect(w.issueWrites).toEqual([{ id: 2, body: { story_id: null } }]);
     });
   }
 });

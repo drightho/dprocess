@@ -161,3 +161,4 @@ form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; max
 .comments li { border-left: 3px solid var(--border); padding-left: 0.75rem; }
 .comments p { margin: 0.15rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 a.chip { text-decoration: none; }
+form.inline.wide input { width: min(34rem, 100%); }
