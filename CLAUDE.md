@@ -16,7 +16,7 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 - Story states: `draft, review, design, implementation, testing, finished, cancelled`.
 - A story may depend only on stories in the **same project**; reject self-dependencies and cycles.
 - Stories should be estimated at ≤400 LOC. This is **warn-only**: accept larger estimates and return a `warnings` entry (`estimate_exceeds_400_loc`), never reject.
-- GitHub issues are a **separate entity** that stores references to issues living on GitHub (optionally linked to a story). v1 makes no GitHub API calls.
+- GitHub issues are a **separate entity** (only canonical github.com issue URLs are accepted) that stores references to issues living on GitHub (optionally linked to a story). v1 makes no GitHub API calls.
 - **The detailed state-transition rules have not been supplied yet.** Ask the user for them before implementing or changing real transition logic. Until then use provisional defaults (forward along the listed order, any non-terminal state → `cancelled`, `finished`/`cancelled` terminal), clearly marked provisional in code.
 
 ## Architecture decisions
@@ -43,4 +43,5 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 Done: scaffold + migrations + health; projects CRUD; epics CRUD + `internal/workflow` + epic transition endpoint + history (`store.transition` is shared with stories).
 Also done: stories CRUD, transitions, history, LOC warning (`service.StoryWarnings`). A story's epic cannot be changed after creation; deleting a story that others depend on returns 409.
 Also done: story dependencies. Their invariants (same project, no self-dependency, no cycle via a recursive CTE) live in `store.AddDependency` rather than `service` because the check and insert must share one transaction.
-Next: comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.
+Also done: tags, comments, GitHub issue references. Tag rules live in `service.NormalizeTag`; issue URL rules in `service.ParseIssueURL` (only `https://github.com/{owner}/{repo}/issues/{n}` is accepted, stored canonical/lower-case, unique per project via migration `0002`).
+Next: OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.

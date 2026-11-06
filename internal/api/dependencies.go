@@ -17,6 +17,7 @@ type storyDetail struct {
 	storyView
 	DependsOn  []store.StoryRef `json:"depends_on"`
 	Dependents []store.StoryRef `json:"dependents"`
+	Issues     []*store.Issue   `json:"issues"`
 }
 
 func (s *Server) detailStory(st *store.Story) (storyDetail, error) {
@@ -25,7 +26,10 @@ func (s *Server) detailStory(st *store.Story) (storyDetail, error) {
 	if d.DependsOn, err = s.Store.ListDependencies(st.ID); err != nil {
 		return d, err
 	}
-	d.Dependents, err = s.Store.ListDependents(st.ID)
+	if d.Dependents, err = s.Store.ListDependents(st.ID); err != nil {
+		return d, err
+	}
+	d.Issues, err = s.Store.ListIssues(st.ProjectID, st.ID)
 	return d, err
 }
 

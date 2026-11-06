@@ -29,8 +29,9 @@ func TestOpenMigratesAndPersists(t *testing.T) {
 	}
 	var n int
 	s.DB.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n)
-	if n != 1 {
-		t.Fatalf("expected 1 migration row, got %d", n)
+	files, _ := migrationFS.ReadDir("migrations")
+	if n != len(files) {
+		t.Fatalf("expected %d migration rows (one per file), got %d", len(files), n)
 	}
 }
 

@@ -160,6 +160,11 @@ func (s *Server) listProjectStories(w http.ResponseWriter, r *http.Request) {
 		}
 		f.EpicID = id
 	}
+	tag, ok := tagFilter(w, r)
+	if !ok {
+		return
+	}
+	f.Tag = tag
 	ss, err := s.Store.ListStories(pid, f)
 	if err != nil {
 		storeError(w, err)

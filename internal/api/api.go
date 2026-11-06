@@ -21,6 +21,8 @@ func (s *Server) Handler() http.Handler {
 	s.registerEpics(mux)
 	s.registerStories(mux)
 	s.registerDependencies(mux)
+	s.registerTagsAndComments(mux)
+	s.registerIssues(mux)
 	return mux
 }
 

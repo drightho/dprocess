@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dright/dprocess/internal/service"
 	"github.com/dright/dprocess/internal/store"
 	"github.com/dright/dprocess/internal/workflow"
 )
@@ -33,9 +34,12 @@ func storeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found", err.Error())
-	case errors.Is(err, store.ErrInUse), errors.Is(err, store.ErrCycle), errors.Is(err, workflow.ErrIllegalTransition):
+	case errors.Is(err, store.ErrInUse), errors.Is(err, store.ErrCycle), errors.Is(err, store.ErrDuplicate),
+		errors.Is(err, workflow.ErrIllegalTransition):
 		writeError(w, http.StatusConflict, "conflict", err.Error())
-	case errors.Is(err, workflow.ErrUnknownState), errors.Is(err, store.ErrSelfDependency), errors.Is(err, store.ErrCrossProject):
+	case errors.Is(err, workflow.ErrUnknownState), errors.Is(err, store.ErrSelfDependency),
+		errors.Is(err, store.ErrCrossProject), errors.Is(err, store.ErrBadReference),
+		errors.Is(err, service.ErrInvalidTag), errors.Is(err, service.ErrInvalidIssueURL):
 		writeError(w, http.StatusUnprocessableEntity, "validation failed", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error", err.Error())

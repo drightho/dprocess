@@ -8,17 +8,18 @@ import (
 
 // Story is a deliverable, verifiable piece of software within an epic.
 type Story struct {
-	ID                 int64  `json:"id"`
-	ProjectID          int64  `json:"project_id"`
-	EpicID             int64  `json:"epic_id"`
-	Name               string `json:"name"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	State              string `json:"state"`
-	EstimateLOC        *int64 `json:"estimate_loc"`
-	Assignee           string `json:"assignee"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
+	ID                 int64    `json:"id"`
+	ProjectID          int64    `json:"project_id"`
+	EpicID             int64    `json:"epic_id"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	AcceptanceCriteria string   `json:"acceptance_criteria"`
+	State              string   `json:"state"`
+	EstimateLOC        *int64   `json:"estimate_loc"`
+	Assignee           string   `json:"assignee"`
+	Tags               []string `json:"tags"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
 }
 
 const storyCols = `id, project_id, epic_id, name, description, acceptance_criteria, state, estimate_loc, assignee, created_at, updated_at`
@@ -79,14 +80,23 @@ func (s *Store) CreateStory(epicID int64, in NewStory) (*Story, error) {
 
 // GetStory returns one story or ErrNotFound.
 func (s *Store) GetStory(id int64) (*Story, error) {
-	return scanStory(s.DB.QueryRow(`SELECT `+storyCols+` FROM stories WHERE id = ?`, id))
+	st, err := scanStory(s.DB.QueryRow(`SELECT `+storyCols+` FROM stories WHERE id = ?`, id))
+	if err != nil {
+		return nil, err
+	}
+	if st.Tags, err = s.ListTags("story", id); err != nil {
+		return nil, err
+	}
+	return st, nil
 }
 
-// StoryFilter narrows story listings; zero values mean "any".
+// StoryFilter narrows story listings; zero values mean "any". Tag must
+// already be normalized.
 type StoryFilter struct {
 	State    string
 	EpicID   int64
 	Assignee string
+	Tag      string
 }
 
 // ListStories returns the stories of a project matching the filter.
@@ -108,6 +118,10 @@ func (s *Store) ListStories(projectID int64, f StoryFilter) ([]*Story, error) {
 		q += ` AND assignee = ?`
 		args = append(args, f.Assignee)
 	}
+	if f.Tag != "" {
+		q += ` AND EXISTS (SELECT 1 FROM entity_tags t WHERE t.entity_type = 'story' AND t.entity_id = stories.id AND t.tag = ?)`
+		args = append(args, f.Tag)
+	}
 	return s.queryStories(q+` ORDER BY id`, args...)
 }
 
@@ -124,16 +138,24 @@ func (s *Store) queryStories(q string, args ...any) ([]*Story, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []*Story{}
 	for rows.Next() {
 		st, err := scanStory(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, st)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close() // release the single connection before loading tags
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachStoryTags(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // UpdateStory applies a patch. State changes only via TransitionStory.
@@ -175,6 +197,7 @@ func (s *Store) DeleteStory(id int64) error {
 	if _, err := tx.Exec(`DELETE FROM story_dependencies WHERE story_id = ?`, id); err != nil {
 		return err
 	}
+	// issues.story_id is cleared by ON DELETE SET NULL.
 	for _, t := range []string{"state_history", "comments", "entity_tags"} {
 		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE entity_type = 'story' AND entity_id = ?`, id); err != nil {
 			return err

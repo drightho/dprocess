@@ -63,7 +63,7 @@ func TestEpicLifecycle(t *testing.T) {
 	if resp2.StatusCode != 422 {
 		t.Fatalf("bad filter: %d", resp2.StatusCode)
 	}
-	es, err := st.ListEpics(1, "draft")
+	es, err := st.ListEpics(1, "draft", "")
 	if err != nil || len(es) != 1 || es[0].Name != "E2" {
 		t.Fatalf("filter: %v %v", es, err)
 	}

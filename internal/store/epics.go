@@ -8,13 +8,14 @@ import (
 
 // Epic is a group of related stories within a project.
 type Epic struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	State       string `json:"state"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID          int64    `json:"id"`
+	ProjectID   int64    `json:"project_id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	State       string   `json:"state"`
+	Tags        []string `json:"tags"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
 }
 
 const epicCols = `id, project_id, name, description, state, created_at, updated_at`
@@ -48,11 +49,19 @@ func (s *Store) CreateEpic(projectID int64, name, description string) (*Epic, er
 
 // GetEpic returns one epic or ErrNotFound.
 func (s *Store) GetEpic(id int64) (*Epic, error) {
-	return scanEpic(s.DB.QueryRow(`SELECT `+epicCols+` FROM epics WHERE id = ?`, id))
+	e, err := scanEpic(s.DB.QueryRow(`SELECT `+epicCols+` FROM epics WHERE id = ?`, id))
+	if err != nil {
+		return nil, err
+	}
+	if e.Tags, err = s.ListTags("epic", id); err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
-// ListEpics returns the epics of a project, optionally filtered by state.
-func (s *Store) ListEpics(projectID int64, state string) ([]*Epic, error) {
+// ListEpics returns the epics of a project, optionally filtered by state
+// and/or tag (already normalized).
+func (s *Store) ListEpics(projectID int64, state, tag string) ([]*Epic, error) {
 	if _, err := s.GetProject(projectID); err != nil {
 		return nil, err
 	}
@@ -62,20 +71,32 @@ func (s *Store) ListEpics(projectID int64, state string) ([]*Epic, error) {
 		q += ` AND state = ?`
 		args = append(args, state)
 	}
+	if tag != "" {
+		q += ` AND EXISTS (SELECT 1 FROM entity_tags t WHERE t.entity_type = 'epic' AND t.entity_id = epics.id AND t.tag = ?)`
+		args = append(args, tag)
+	}
 	rows, err := s.DB.Query(q+` ORDER BY id`, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []*Epic{}
 	for rows.Next() {
 		e, err := scanEpic(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close() // release the single connection before loading tags
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachEpicTags(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // UpdateEpic changes name and/or description (nil = unchanged). State is

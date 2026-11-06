@@ -48,7 +48,11 @@ func (s *Server) listEpics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation failed", "unknown state "+strconv.Quote(state))
 		return
 	}
-	es, err := s.Store.ListEpics(pid, state)
+	tag, ok := tagFilter(w, r)
+	if !ok {
+		return
+	}
+	es, err := s.Store.ListEpics(pid, state, tag)
 	if err != nil {
 		storeError(w, err)
 		return
