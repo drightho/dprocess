@@ -104,6 +104,13 @@ describe("ProjectPage overview", () => {
     expect(back.getAttribute("href")).toBe("/projects");
   });
 
+  it("links to the project's issues", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(screen.getByRole("link", { name: "Issues" }).getAttribute("href")).toBe("/projects/1/issues");
+  });
+
   it("links each epic, and each story card's epic name, to the epic page", async () => {
     mockApi(fullRoutes);
     renderAt("/projects/1");

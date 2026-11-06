@@ -2,6 +2,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "./api/client";
 import EpicPage from "./pages/EpicPage";
+import IssuesPage from "./pages/IssuesPage";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
 import StoryPage from "./pages/StoryPage";
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
+          <Route path="/projects/:projectId/issues" element={<IssuesPage />} />
           <Route path="/epics/:epicId" element={<EpicPage />} />
           <Route path="/stories/:storyId" element={<StoryPage />} />
           <Route path="*" element={<NotFound />} />

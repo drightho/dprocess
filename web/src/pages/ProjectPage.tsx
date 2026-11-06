@@ -107,6 +107,9 @@ export default function ProjectPage() {
       </p>
       <h1>{project.data.name}</h1>
       {project.data.description && <p className="meta">{project.data.description}</p>}
+      <p>
+        <Link to={`/projects/${project.data.id}/issues`}>Issues</Link>
+      </p>
 
       <h2>Epics</h2>
       <EpicList

@@ -52,6 +52,36 @@ export function storyDetail(over: Partial<StoryDetail> = {}): StoryDetail {
   return { ...story(), depends_on: [], dependents: [], issues: [], pull_requests: [], ...over } as StoryDetail;
 }
 
+export type Issue = Schemas["Issue"];
+export type PullRequest = Schemas["PullRequest"];
+
+export function issue(over: Partial<Issue> = {}): Issue {
+  return {
+    id: 1,
+    project_id: 1,
+    story_id: null,
+    github_url: "https://github.com/acme/widgets/issues/42",
+    github_repo: "acme/widgets",
+    number: 42,
+    title: "",
+    kind: "",
+    created_at: "2026-01-02T03:04:05.000Z",
+    ...over,
+  };
+}
+
+export function pullRequest(over: Partial<PullRequest> = {}): PullRequest {
+  return {
+    id: 1,
+    story_id: 1,
+    github_url: "https://github.com/acme/widgets/pull/7",
+    github_repo: "acme/widgets",
+    number: 7,
+    created_at: "2026-01-02T03:04:05.000Z",
+    ...over,
+  };
+}
+
 export type Comment = Schemas["Comment"];
 
 export function comment(over: Partial<Comment> = {}): Comment {

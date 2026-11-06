@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
-import { epic, mockApi, project, story, storyDetail } from "./test/fixtures";
+import { epic, issue, mockApi, project, story, storyDetail } from "./test/fixtures";
 
 function renderAt(url: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -71,6 +71,18 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Invoice list" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Move to review" })).toBeTruthy();
     expect((await screen.findByRole("link", { name: /Billing/ })).getAttribute("href")).toBe("/epics/3");
+  });
+
+  it("serves the issues page at /projects/:id/issues", async () => {
+    mockApi({
+      "/api/v1/health": { status: "ok" },
+      "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
+      "/api/v1/projects/1/issues": [issue({ id: 1, github_repo: "acme/widgets", number: 42, title: "Crash" })],
+      "/api/v1/projects/1/stories": [],
+    });
+    renderAt("/projects/1/issues");
+    expect(await screen.findByRole("heading", { name: "Issues" })).toBeTruthy();
+    expect(await screen.findByText("acme/widgets#42")).toBeTruthy();
   });
 
   it("shows a not-found page for unknown routes", () => {

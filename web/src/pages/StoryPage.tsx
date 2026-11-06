@@ -5,7 +5,9 @@ import { api, ApiError, unwrap } from "../api/client";
 import DependencySection from "../components/DependencySection";
 import HistoryList from "../components/HistoryList";
 import NotFoundNotice from "../components/NotFoundNotice";
+import PullRequestSection from "../components/PullRequestSection";
 import StateBadge from "../components/StateBadge";
+import StoryIssues from "../components/StoryIssues";
 import StoryForm from "../components/StoryForm";
 import StoryTransitionPanel from "../components/StoryTransitionPanel";
 import CommentThread from "../components/CommentThread";
@@ -114,6 +116,12 @@ export default function StoryPage() {
       <TagEditor kind="story" id={s.id} projectId={s.project_id} epicId={s.epic_id} tags={s.tags} />
 
       <DependencySection story={s} />
+
+      <h2>Pull requests</h2>
+      <PullRequestSection story={s} />
+
+      <h2>Issues</h2>
+      <StoryIssues story={s} />
 
       <h2>Comments</h2>
       <CommentThread kind="story" id={s.id} />
