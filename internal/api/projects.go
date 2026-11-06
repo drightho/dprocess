@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dright/dprocess/internal/store"
+	"github.com/dright/dprocess/internal/workflow"
 )
 
 // pathID parses the named path value as a positive int64.
@@ -32,8 +33,10 @@ func storeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found", err.Error())
-	case errors.Is(err, store.ErrInUse):
+	case errors.Is(err, store.ErrInUse), errors.Is(err, workflow.ErrIllegalTransition):
 		writeError(w, http.StatusConflict, "conflict", err.Error())
+	case errors.Is(err, workflow.ErrUnknownState):
+		writeError(w, http.StatusUnprocessableEntity, "validation failed", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error", err.Error())
 	}

@@ -18,6 +18,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	s.registerProjects(mux)
+	s.registerEpics(mux)
 	return mux
 }
 

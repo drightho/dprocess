@@ -40,5 +40,5 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 
 ## Roadmap
 
-Done: scaffold + migrations + health; projects CRUD.
-Next: epics + workflow package + transition endpoint + history; stories + LOC warning; dependencies; comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.
+Done: scaffold + migrations + health; projects CRUD; epics CRUD + `internal/workflow` + epic transition endpoint + history (`store.transition` is shared with stories).
+Next: stories + LOC warning (add `service.TransitionStory` using `workflow.Story`); dependencies; comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.

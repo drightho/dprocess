@@ -14,8 +14,9 @@ Work in progress. Implemented so far:
 
 - Server scaffold, embedded SQLite with migrations, health endpoint
 - Projects CRUD (`/api/v1/projects`)
+- Epics CRUD, state transitions and history (provisional transition rules)
 
-Planned: epics, stories, state transitions with history, story dependencies, comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
+Planned: stories, story dependencies, comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
 
 ## Architecture
 
@@ -52,7 +53,18 @@ curl -s          localhost:8080/api/v1/projects
 curl -s          localhost:8080/api/v1/projects/1
 curl -s -X PATCH localhost:8080/api/v1/projects/1 -d '{"name":"Renamed"}'
 curl -s -X DELETE localhost:8080/api/v1/projects/1
+
+# epics
+curl -s -X POST localhost:8080/api/v1/projects/1/epics -d '{"name":"Login"}'
+curl -s          localhost:8080/api/v1/projects/1/epics?state=draft
+curl -s          localhost:8080/api/v1/epics/1          # includes allowed_transitions
+curl -s -X PATCH localhost:8080/api/v1/epics/1 -d '{"description":"..."}'
+curl -s -X POST  localhost:8080/api/v1/epics/1/transition -d '{"to":"review","reason":"ready","actor":"ann"}'
+curl -s          localhost:8080/api/v1/epics/1/history
+curl -s -X DELETE localhost:8080/api/v1/epics/1         # 409 while it has stories
 ```
+
+An epic's state cannot be changed with PATCH, only through `transition`. An illegal transition returns 409 and an unknown state returns 422. The transition rules are currently provisional: one step forward along `draft, review, ready, finished`, or `cancelled` from any non-terminal state.
 
 Errors are returned as `application/problem+json` documents (`title`, `status`, `detail`):
 
@@ -74,5 +86,7 @@ make test    # go vet ./... && go test ./...
 ```
 cmd/dprocess/            main: flags, wiring, graceful shutdown
 internal/store/          SQLite access, embedded migrations (migrations/*.sql)
+internal/service/        business rules (state transitions)
+internal/workflow/       epic and story state machines (provisional rules)
 internal/api/            HTTP handlers, JSON and error helpers
 ```
