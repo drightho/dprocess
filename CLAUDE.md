@@ -41,4 +41,5 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 ## Roadmap
 
 Done: scaffold + migrations + health; projects CRUD; epics CRUD + `internal/workflow` + epic transition endpoint + history (`store.transition` is shared with stories).
-Next: stories + LOC warning (add `service.TransitionStory` using `workflow.Story`); dependencies; comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.
+Also done: stories CRUD, transitions, history, LOC warning (`service.StoryWarnings`). A story's epic cannot be changed after creation; deleting a story that others depend on returns 409.
+Next: dependencies; comments/tags/issues; OpenAPI (`api/openapi.yaml`) + frontend scaffold; UI; real transition rules.

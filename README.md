@@ -15,8 +15,9 @@ Work in progress. Implemented so far:
 - Server scaffold, embedded SQLite with migrations, health endpoint
 - Projects CRUD (`/api/v1/projects`)
 - Epics CRUD, state transitions and history (provisional transition rules)
+- Stories CRUD, state transitions, history and the 400 LOC warning
 
-Planned: stories, story dependencies, comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
+Planned: story dependencies, comments/tags, issue references, and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
 
 ## Architecture
 
@@ -62,9 +63,21 @@ curl -s -X PATCH localhost:8080/api/v1/epics/1 -d '{"description":"..."}'
 curl -s -X POST  localhost:8080/api/v1/epics/1/transition -d '{"to":"review","reason":"ready","actor":"ann"}'
 curl -s          localhost:8080/api/v1/epics/1/history
 curl -s -X DELETE localhost:8080/api/v1/epics/1         # 409 while it has stories
+
+# stories
+curl -s -X POST localhost:8080/api/v1/epics/1/stories -d '{"name":"Login form","acceptance_criteria":"...","estimate_loc":150,"assignee":"bob"}'
+curl -s          localhost:8080/api/v1/epics/1/stories
+curl -s          'localhost:8080/api/v1/projects/1/stories?state=draft&epic=1&assignee=bob'
+curl -s          localhost:8080/api/v1/stories/1        # includes warnings and allowed_transitions
+curl -s -X PATCH localhost:8080/api/v1/stories/1 -d '{"estimate_loc":null}'   # null clears the estimate
+curl -s -X POST  localhost:8080/api/v1/stories/1/transition -d '{"to":"review"}'
+curl -s          localhost:8080/api/v1/stories/1/history
+curl -s -X DELETE localhost:8080/api/v1/stories/1
 ```
 
-An epic's state cannot be changed with PATCH, only through `transition`. An illegal transition returns 409 and an unknown state returns 422. The transition rules are currently provisional: one step forward along `draft, review, ready, finished`, or `cancelled` from any non-terminal state.
+An `estimate_loc` above 400 is accepted, and the story response then carries `"warnings": ["estimate_exceeds_400_loc"]`. A story's epic cannot be changed after creation, and deleting a story that other stories depend on returns 409.
+
+An epic's or story's state cannot be changed with PATCH, only through `transition`. An illegal transition returns 409 and an unknown state returns 422. The transition rules are currently provisional: one step forward along the state order (epics: `draft, review, ready, finished`; stories: `draft, review, design, implementation, testing, finished`), or `cancelled` from any non-terminal state.
 
 Errors are returned as `application/problem+json` documents (`title`, `status`, `detail`):
 

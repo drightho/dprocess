@@ -19,6 +19,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	s.registerProjects(mux)
 	s.registerEpics(mux)
+	s.registerStories(mux)
 	return mux
 }
 
