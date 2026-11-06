@@ -114,6 +114,13 @@ describe("ProjectPage overview", () => {
     expect(within(invoice).getByRole("link", { name: "Billing" }).getAttribute("href")).toBe("/epics/2");
   });
 
+  it("links each story card to the story page", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(screen.getByRole("link", { name: "Invoice list" }).getAttribute("href")).toBe("/stories/3");
+  });
+
   it("requests the project, its epics and its stories once each", async () => {
     const { calls } = mockApi(fullRoutes);
     renderAt("/projects/1");

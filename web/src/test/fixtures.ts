@@ -40,6 +40,18 @@ export function story(over: Partial<Story> = {}): Story {
   };
 }
 
+export type StoryRef = Schemas["StoryRef"];
+export type StoryDetail = Schemas["StoryDetail"];
+
+export function storyRef(over: Partial<StoryRef> = {}): StoryRef {
+  return { id: 2, epic_id: 1, name: "Other", state: "draft", ...over };
+}
+
+/** A story as GET /stories/{id} returns it: the story plus its relations. */
+export function storyDetail(over: Partial<StoryDetail> = {}): StoryDetail {
+  return { ...story(), depends_on: [], dependents: [], issues: [], pull_requests: [], ...over } as StoryDetail;
+}
+
 export type HistoryEntry = Schemas["HistoryEntry"];
 
 export function historyEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {

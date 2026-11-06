@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
-import { epic, mockApi, project, story } from "./test/fixtures";
+import { epic, mockApi, project, story, storyDetail } from "./test/fixtures";
 
 function renderAt(url: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -58,6 +58,19 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Billing" })).toBeTruthy();
     expect(screen.getByText("Invoice list")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Move to review" })).toBeTruthy();
+  });
+
+  it("serves the story page at /stories/:id", async () => {
+    mockApi({
+      "/api/v1/health": { status: "ok" },
+      "/api/v1/stories/4": { ...storyDetail({ id: 4, epic_id: 3, name: "Invoice list", state: "draft" }), allowed_transitions: ["review", "cancelled"] },
+      "/api/v1/stories/4/history": [],
+      "/api/v1/epics/3": { ...epic({ id: 3, project_id: 1, name: "Billing" }), allowed_transitions: [] },
+    });
+    renderAt("/stories/4");
+    expect(await screen.findByRole("heading", { name: "Invoice list" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move to review" })).toBeTruthy();
+    expect((await screen.findByRole("link", { name: /Billing/ })).getAttribute("href")).toBe("/epics/3");
   });
 
   it("shows a not-found page for unknown routes", () => {

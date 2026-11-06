@@ -4,6 +4,7 @@ import { api, unwrap } from "./api/client";
 import EpicPage from "./pages/EpicPage";
 import LandingPage from "./pages/LandingPage";
 import ProjectPage from "./pages/ProjectPage";
+import StoryPage from "./pages/StoryPage";
 import ProjectsPage from "./pages/ProjectsPage";
 
 function HealthBadge() {
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="/epics/:epicId" element={<EpicPage />} />
+          <Route path="/stories/:storyId" element={<StoryPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
