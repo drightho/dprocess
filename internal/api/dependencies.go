@@ -15,9 +15,10 @@ func (s *Server) registerDependencies(mux *http.ServeMux) {
 // storyDetail is a story with its dependency relations.
 type storyDetail struct {
 	storyView
-	DependsOn  []store.StoryRef `json:"depends_on"`
-	Dependents []store.StoryRef `json:"dependents"`
-	Issues     []*store.Issue   `json:"issues"`
+	DependsOn    []store.StoryRef     `json:"depends_on"`
+	Dependents   []store.StoryRef     `json:"dependents"`
+	Issues       []*store.Issue       `json:"issues"`
+	PullRequests []*store.PullRequest `json:"pull_requests"`
 }
 
 func (s *Server) detailStory(st *store.Story) (storyDetail, error) {
@@ -29,7 +30,10 @@ func (s *Server) detailStory(st *store.Story) (storyDetail, error) {
 	if d.Dependents, err = s.Store.ListDependents(st.ID); err != nil {
 		return d, err
 	}
-	d.Issues, err = s.Store.ListIssues(st.ProjectID, st.ID)
+	if d.Issues, err = s.Store.ListIssues(st.ProjectID, st.ID); err != nil {
+		return d, err
+	}
+	d.PullRequests, err = s.Store.ListPullRequests(st.ID)
 	return d, err
 }
 

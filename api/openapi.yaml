@@ -16,6 +16,7 @@ tags:
   - name: Tags
   - name: Comments
   - name: Issues
+  - name: Pull requests
   - name: System
 
 paths:
@@ -541,6 +542,66 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /stories/{id}/pull-requests:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Pull requests]
+      operationId: listStoryPullRequests
+      responses:
+        "200":
+          description: Pull requests linked to the story, in the order added
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PullRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Pull requests]
+      operationId: addStoryPullRequest
+      summary: Link a GitHub pull request to the story
+      description: >
+        Only https://github.com/{owner}/{repo}/pull/{number} URLs are accepted
+        (optional trailing slash; no query string, fragment or extra path such
+        as /files; issue URLs are rejected with 422). The URL is stored in
+        canonical lower-case form. Linking the same pull request twice returns
+        409. The pull request list is part of the story, so finished and
+        cancelled stories reject changes (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PullRequestCreate" }
+      responses:
+        "201":
+          description: Linked
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PullRequest" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /stories/{id}/pull-requests/{prId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: prId
+        in: path
+        required: true
+        schema: { type: integer, format: int64, minimum: 1 }
+    delete:
+      tags: [Pull requests]
+      operationId: removeStoryPullRequest
+      description: 409 when the story is finished or cancelled.
+      responses:
+        "204": { description: Unlinked }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /stories/{id}/tags/{tag}:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -771,8 +832,11 @@ components:
       allOf:
         - $ref: "#/components/schemas/Story"
         - type: object
-          required: [depends_on, dependents, issues]
+          required: [depends_on, dependents, issues, pull_requests]
           properties:
+            pull_requests:
+              type: array
+              items: { $ref: "#/components/schemas/PullRequest" }
             depends_on:
               type: array
               items: { $ref: "#/components/schemas/StoryRef" }
@@ -871,6 +935,22 @@ components:
         title: { type: string }
         kind: { type: string }
         created_at: { type: string, format: date-time }
+    PullRequest:
+      type: object
+      required: [id, story_id, github_url, github_repo, number, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        story_id: { type: integer, format: int64 }
+        github_url: { type: string, example: "https://github.com/acme/widgets/pull/42" }
+        github_repo: { type: string, example: acme/widgets }
+        number: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    PullRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [github_url]
+      properties:
+        github_url: { type: string }
     IssueCreate:
       type: object
       additionalProperties: false

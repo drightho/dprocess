@@ -26,6 +26,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerDependencies(mux)
 	s.registerTagsAndComments(mux)
 	s.registerIssues(mux)
+	s.registerPullRequests(mux)
 	mux.HandleFunc("GET /api/v1/openapi.yaml", s.serveSpec)
 	mux.HandleFunc("/api/", apiNotFound)
 	if s.UI != nil {

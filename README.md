@@ -17,7 +17,7 @@ Work in progress. Implemented so far:
 - Epics CRUD, state transitions and history
 - Stories CRUD, state transitions, history and the 400 LOC warning
 - Story dependencies with same-project and cycle checks
-- Tags and comments on epics and stories; GitHub issue references
+- Tags and comments on epics and stories; GitHub issue references; GitHub pull request links on stories
 - OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
 - Web UI scaffold (React + TypeScript + Vite) embedded in the binary; it currently lists and creates projects
 
@@ -91,6 +91,11 @@ curl -s          'localhost:8080/api/v1/projects/1/stories?tag=backend'   # epic
 curl -s -X POST  localhost:8080/api/v1/stories/1/comments -d '{"body":"Needs a design review","author":"ann"}'
 curl -s          localhost:8080/api/v1/stories/1/comments
 
+# GitHub pull requests linked to a story
+curl -s -X POST   localhost:8080/api/v1/stories/1/pull-requests -d '{"github_url":"https://github.com/acme/widgets/pull/57"}'
+curl -s           localhost:8080/api/v1/stories/1/pull-requests        # also listed in GET /stories/1 as pull_requests
+curl -s -X DELETE localhost:8080/api/v1/stories/1/pull-requests/1
+
 # GitHub issue references (DProcess never calls GitHub)
 curl -s -X POST  localhost:8080/api/v1/projects/1/issues -d '{"github_url":"https://github.com/acme/widgets/issues/42","title":"Crash on save","kind":"bug","story_id":1}'
 curl -s          'localhost:8080/api/v1/projects/1/issues?story=1'
@@ -99,6 +104,8 @@ curl -s -X DELETE localhost:8080/api/v1/issues/1
 ```
 
 Tags match `^[a-z0-9][a-z0-9._:-]{0,49}$` after trimming and lower-casing (422 otherwise). Comments cannot be edited or deleted.
+
+Pull request links accept only URLs of the form `https://github.com/{owner}/{repo}/pull/{number}` (same strict rules as issues: optional trailing slash, no query string, fragment or extra path such as `/files`; issue URLs are rejected, 422). The URL is stored in canonical lower-case form; linking the same pull request twice to a story returns 409. The list is part of the story record, so it is frozen with it: adding or removing a link on a `finished` or `cancelled` story returns 409. Deleting a story deletes its links.
 
 Issues accept only URLs of the form `https://github.com/{owner}/{repo}/issues/{number}` (optional trailing slash; no query string or fragment; pull request URLs are rejected) with 422 otherwise. The URL is stored in canonical lower-case form and cannot be changed afterwards (delete and recreate instead). Referencing the same issue twice in a project returns 409. A `story_id` must belong to the same project as the issue (422). Deleting a story unlinks its issues; deleting a project that still has issues returns 409.
 

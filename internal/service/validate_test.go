@@ -69,3 +69,55 @@ func TestNormalizeTag(t *testing.T) {
 		t.Errorf("50 chars should be valid: %v", err)
 	}
 }
+
+func TestParsePullRequestURL(t *testing.T) {
+	good := []struct {
+		in, repo, canonical string
+		n                   int64
+	}{
+		{"https://github.com/acme/widgets/pull/42", "acme/widgets", "https://github.com/acme/widgets/pull/42", 42},
+		{"  https://github.com/Acme/Widgets/pull/7/ ", "acme/widgets", "https://github.com/acme/widgets/pull/7", 7},
+		{"https://github.com/a-b/c.d_e/pull/1", "a-b/c.d_e", "https://github.com/a-b/c.d_e/pull/1", 1},
+	}
+	for _, c := range good {
+		repo, n, canon, err := ParsePullRequestURL(c.in)
+		if err != nil || repo != c.repo || n != c.n || canon != c.canonical {
+			t.Errorf("%q: got %q %d %q %v", c.in, repo, n, canon, err)
+		}
+	}
+	bad := []string{
+		"",
+		"not a url",
+		"https://github.com/acme/widgets/issues/1", // an issue, not a pull request
+		"https://github.com/acme/widgets/pulls/1",
+		"https://github.com/acme/widgets/pull/1/files",
+		"https://github.com/acme/widgets/pull/1/commits/abc123",
+		"https://github.com/acme/widgets/pull/1#issuecomment-5",
+		"https://github.com/acme/widgets/pull/1?diff=split",
+		"https://github.com/acme/widgets/pull/0",
+		"https://github.com/acme/widgets/pull/abc",
+		"https://github.com/acme/widgets/pull",
+		"https://github.com/acme/pull/1",
+		"http://github.com/acme/widgets/pull/1",
+		"https://www.github.com/acme/widgets/pull/1",
+		"https://gitlab.com/acme/widgets/pull/1",
+		"https://gitlab.com/acme/widgets/-/merge_requests/1",
+		"https://github.com.evil.com/acme/widgets/pull/1",
+		"https://user@github.com/acme/widgets/pull/1",
+		"https://github.com/../widgets/pull/1",
+		"https://github.com/acme/widgets/pull/99999999999999999999",
+	}
+	for _, in := range bad {
+		_, _, _, err := ParsePullRequestURL(in)
+		if !errors.Is(err, ErrInvalidPullRequestURL) {
+			t.Errorf("%q: expected ErrInvalidPullRequestURL, got %v", in, err)
+		}
+		if errors.Is(err, ErrInvalidIssueURL) {
+			t.Errorf("%q: pull request errors must not be issue errors", in)
+		}
+	}
+	// And the other way round: a PR URL is not an issue URL.
+	if _, _, _, err := ParseIssueURL("https://github.com/acme/widgets/pull/1"); !errors.Is(err, ErrInvalidIssueURL) {
+		t.Errorf("PR URL accepted as issue URL: %v", err)
+	}
+}

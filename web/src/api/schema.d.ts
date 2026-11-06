@@ -322,6 +322,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stories/{id}/pull-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        get: operations["listStoryPullRequests"];
+        put?: never;
+        /**
+         * Link a GitHub pull request to the story
+         * @description Only https://github.com/{owner}/{repo}/pull/{number} URLs are accepted (optional trailing slash; no query string, fragment or extra path such as /files; issue URLs are rejected with 422). The URL is stored in canonical lower-case form. Linking the same pull request twice returns 409. The pull request list is part of the story, so finished and cancelled stories reject changes (409).
+         */
+        post: operations["addStoryPullRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stories/{id}/pull-requests/{prId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                prId: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description 409 when the story is finished or cancelled. */
+        delete: operations["removeStoryPullRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stories/{id}/tags/{tag}": {
         parameters: {
             query?: never;
@@ -452,6 +494,7 @@ export interface components {
             updated_at: string;
         };
         StoryDetail: components["schemas"]["Story"] & {
+            pull_requests: components["schemas"]["PullRequest"][];
             depends_on: components["schemas"]["StoryRef"][];
             dependents: components["schemas"]["StoryRef"][];
             issues: components["schemas"]["Issue"][];
@@ -537,6 +580,23 @@ export interface components {
             kind: string;
             /** Format: date-time */
             created_at: string;
+        };
+        PullRequest: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            story_id: number;
+            /** @example https://github.com/acme/widgets/pull/42 */
+            github_url: string;
+            /** @example acme/widgets */
+            github_repo: string;
+            /** Format: int64 */
+            number: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PullRequestCreate: {
+            github_url: string;
         };
         IssueCreate: {
             github_url: string;
@@ -1353,6 +1413,83 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listStoryPullRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pull requests linked to the story, in the order added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PullRequest"][];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addStoryPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PullRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Linked */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PullRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    removeStoryPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                prId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked */
             204: {
                 headers: {
                     [name: string]: unknown;

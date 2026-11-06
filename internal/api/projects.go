@@ -40,7 +40,8 @@ func storeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "conflict", err.Error())
 	case errors.Is(err, workflow.ErrUnknownState), errors.Is(err, store.ErrSelfDependency),
 		errors.Is(err, store.ErrCrossProject), errors.Is(err, store.ErrBadReference),
-		errors.Is(err, service.ErrInvalidTag), errors.Is(err, service.ErrInvalidIssueURL):
+		errors.Is(err, service.ErrInvalidTag), errors.Is(err, service.ErrInvalidIssueURL),
+		errors.Is(err, service.ErrInvalidPullRequestURL):
 		writeError(w, http.StatusUnprocessableEntity, "validation failed", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error", err.Error())
