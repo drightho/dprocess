@@ -141,3 +141,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .history { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
 .history li { border-left: 3px solid var(--border); padding-left: 0.75rem; }
 .history p { margin: 0.15rem 0 0; }
+
+.card form { max-width: none; }
+.card .actions { margin-top: 0.25rem; }
+textarea { min-height: 4.5rem; }

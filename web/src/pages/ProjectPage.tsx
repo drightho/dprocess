@@ -1,7 +1,8 @@
-import { useEffect } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "../api/client";
+import EpicForm from "../components/EpicForm";
 import EpicList from "../components/EpicList";
 import FilterBar from "../components/FilterBar";
 import NotFoundNotice from "../components/NotFoundNotice";
@@ -16,6 +17,22 @@ import {
   type Filters,
 } from "../lib/board";
 import { recordVisit } from "../lib/recent";
+
+/** A button that opens the new-epic form; a created epic is opened on its own page. */
+function NewEpic({ projectId }: { projectId: number }) {
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  if (!open) {
+    return (
+      <p>
+        <button type="button" onClick={() => setOpen(true)}>
+          New epic
+        </button>
+      </p>
+    );
+  }
+  return <EpicForm projectId={projectId} onDone={(epic) => navigate(`/epics/${epic.id}`)} onCancel={() => setOpen(false)} />;
+}
 
 /** Project overview: its epics and a board of its stories grouped by state. */
 export default function ProjectPage() {
@@ -98,6 +115,7 @@ export default function ProjectPage() {
         selectedEpic={filters.epic}
         onSelect={(epic) => setFilters({ ...filters, epic })}
       />
+      <NewEpic projectId={project.data.id} />
 
       <h2>Stories</h2>
       {stories.data.length === 0 ? (

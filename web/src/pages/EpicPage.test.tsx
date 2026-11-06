@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import EpicPage from "./EpicPage";
-import { epic, historyEntry, mockApi, problem, project, story, type HistoryEntry, type Story } from "../test/fixtures";
+import { epic, historyEntry, json, mockApi, problem, project, story, type HistoryEntry, type Story } from "../test/fixtures";
 
 type EpicState = "draft" | "review" | "ready" | "finished" | "cancelled";
 
@@ -30,11 +30,52 @@ function setup(init: Setup = {}) {
     stories: init.stories ?? [],
     history: init.history ?? [],
     posts: [] as { to: string; reason?: string }[],
+    writes: [] as { method: string; path: string; body: Record<string, unknown> }[],
   };
+  const withWarnings = (s: Story): Story => ({ ...s, warnings: s.estimate_loc !== null && s.estimate_loc > 400 ? ["estimate_exceeds_400_loc"] : [] });
+  const bodyOf = async (req: Request, path: string) => {
+    const body = (await req.json()) as Record<string, unknown>;
+    w.writes.push({ method: req.method, path, body });
+    return body;
+  };
+  // Story endpoints answer like the real server: empty names are 422, finished/cancelled stories are 409.
+  const storyRoutes = Object.fromEntries(
+    [1, 2, 3, 4, 5].map((n) => [
+      `/api/v1/stories/${n}`,
+      async (req: Request) => {
+        const body = await bodyOf(req, `/stories/${n}`);
+        const current = w.stories.find((s) => s.id === n)!;
+        if (current.state === "finished" || current.state === "cancelled") {
+          return problem(409, "conflict", `story ${n} is ${current.state}: story is finished or cancelled and cannot be modified`);
+        }
+        if (typeof body.name === "string" && body.name.trim() === "") return problem(422, "validation failed", "name must not be empty");
+        const updated = withWarnings({ ...current, ...(body as Partial<Story>) });
+        w.stories = w.stories.map((s) => (s.id === n ? updated : s));
+        return updated;
+      },
+    ]),
+  );
   const view = () => ({ ...w.epic, allowed_transitions: allowed[w.epic.state as EpicState] });
   const server = mockApi({
-    "/api/v1/epics/1": () => view(),
-    "/api/v1/epics/1/stories": () => w.stories,
+    ...storyRoutes,
+    "/api/v1/epics/1": async (req: Request) => {
+      if (req.method === "PATCH") {
+        const body = await bodyOf(req, "/epics/1");
+        if (typeof body.name === "string" && body.name.trim() === "") return problem(422, "validation failed", "name must not be empty");
+        w.epic = { ...w.epic, ...(body as Partial<typeof w.epic>) };
+      }
+      return view();
+    },
+    "/api/v1/epics/1/stories": async (req: Request) => {
+      if (req.method !== "POST") return w.stories;
+      const body = await bodyOf(req, "/epics/1/stories");
+      if (w.epic.state === "finished" || w.epic.state === "cancelled") return problem(409, "conflict", `epic 1 is ${w.epic.state}: epic is finished or cancelled`);
+      if (typeof body.name !== "string") return problem(422, "validation failed", "name is required");
+      if (body.name.trim() === "") return problem(422, "validation failed", "name must not be empty");
+      const created = withWarnings(story({ ...(body as Partial<Story>), id: Math.max(0, ...w.stories.map((s) => s.id)) + 1, epic_id: 1, project_id: 1, state: "draft" }));
+      w.stories = [...w.stories, created];
+      return json(created, 201);
+    },
     "/api/v1/epics/1/history": () => w.history,
     "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
     "/api/v1/epics/1/transition": async (req: Request) => {
@@ -236,7 +277,7 @@ describe("EpicPage state changes", () => {
       const { unmount } = renderAt();
       await screen.findByRole("heading", { name: "Auth" });
       expect(screen.getByText(`This epic is ${state}; its state can no longer change.`)).toBeTruthy();
-      expect(screen.queryAllByRole("button")).toHaveLength(0);
+      expect(actionNames()).toEqual([]); // no state changes offered
       unmount();
     }
   });
@@ -350,5 +391,151 @@ describe("EpicPage errors", () => {
     renderAt();
     expect(screen.getByText("Loading...")).toBeTruthy();
     await screen.findByRole("heading", { name: "Auth" });
+  });
+});
+
+describe("EpicPage forms", () => {
+  const cardOf = (name: string) => screen.getByText(name).closest("li")!;
+
+  it("edits the epic's name and description", async () => {
+    const { w } = setup({ state: "ready" });
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit epic" }));
+    const form = screen.getByRole("form", { name: "Edit epic" });
+    expect((within(form).getByLabelText("Name") as HTMLInputElement).value).toBe("Auth");
+    expect((within(form).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Sign-in and sessions");
+    fireEvent.change(within(form).getByLabelText("Name"), { target: { value: "Authentication" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save epic" }));
+
+    expect(await screen.findByRole("heading", { name: "Authentication" })).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Edit epic" })).toBeNull();
+    expect(w.writes).toEqual([{ method: "PATCH", path: "/epics/1", body: { name: "Authentication", description: "Sign-in and sessions" } }]);
+  });
+
+  it("leaves the epic unchanged when editing is cancelled", async () => {
+    const { w } = setup();
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit epic" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("heading", { name: "Auth" })).toBeTruthy();
+    expect(w.writes).toHaveLength(0);
+  });
+
+  it("shows the server's message next to the epic form", async () => {
+    setup();
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit epic" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save epic" }));
+    const form = screen.getByRole("form", { name: "Edit epic" });
+    expect((await within(form).findByRole("alert")).textContent).toContain("name must not be empty");
+  });
+
+  it("creates a story, warning about a big estimate while typing and showing the server's warning after", async () => {
+    const { w } = setup({ state: "review", stories: [logout] });
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+
+    fireEvent.click(screen.getByRole("button", { name: "New story" }));
+    const form = screen.getByRole("form", { name: "New story" });
+    fireEvent.change(within(form).getByLabelText("Name"), { target: { value: "Reports" } });
+    fireEvent.change(within(form).getByLabelText("Estimate (lines of code)"), { target: { value: "450" } });
+    expect(within(form).getByText(/Estimate is over 400 lines/)).toBeTruthy();
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" }));
+
+    await waitFor(() => expect(screen.queryByRole("form", { name: "New story" })).toBeNull());
+    expect(w.writes[0]).toEqual({
+      method: "POST",
+      path: "/epics/1/stories",
+      body: { name: "Reports", description: "", acceptance_criteria: "", assignee: "", estimate_loc: 450 },
+    });
+    const card = await waitFor(() => cardOf("Reports"));
+    expect(card.textContent).toContain("draft");
+    expect(card.textContent).toContain("450 LOC");
+    expect(card.textContent).toContain("Estimate is over 400 lines; consider splitting the story"); // from the server's warning
+    expect(screen.getByText("0 of 2 stories finished")).toBeTruthy();
+  });
+
+  it("shows the server's validation message next to the new-story form and keeps it open", async () => {
+    setup();
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+    fireEvent.click(screen.getByRole("button", { name: "New story" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create story" }));
+    const form = screen.getByRole("form", { name: "New story" });
+    expect((await within(form).findByRole("alert")).textContent).toContain("name must not be empty");
+    expect(screen.getByRole("form", { name: "New story" })).toBeTruthy();
+  });
+
+  it("offers no new stories in a finished or cancelled epic", async () => {
+    for (const state of ["finished", "cancelled"] as const) {
+      setup({ state, stories: [login] });
+      const { unmount } = renderAt();
+      await screen.findByRole("heading", { name: "Auth" });
+      expect(screen.getByText(`This epic is ${state} and accepts no new stories.`)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "New story" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Edit epic" })).toBeTruthy(); // the epic itself stays editable
+      unmount();
+    }
+  });
+
+  it("edits a story in place", async () => {
+    const { w } = setup({ state: "ready", stories: [login, logout] });
+    renderAt();
+    await screen.findByText("Logout");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Logout" }));
+    const form = screen.getByRole("form", { name: "Edit story" });
+    expect((within(form).getByLabelText("Name") as HTMLInputElement).value).toBe("Logout");
+    fireEvent.change(within(form).getByLabelText("Assignee"), { target: { value: "carol" } });
+    fireEvent.change(within(form).getByLabelText("Estimate (lines of code)"), { target: { value: "90" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save story" }));
+
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Edit story" })).toBeNull());
+    expect(w.writes[0].path).toBe("/stories/2");
+    expect(w.writes[0].body).toMatchObject({ name: "Logout", assignee: "carol", estimate_loc: 90 });
+    await waitFor(() => expect(cardOf("Logout").textContent).toContain("carol"));
+    expect(cardOf("Logout").textContent).toContain("90 LOC");
+  });
+
+  it("shows the server's message inside the story form", async () => {
+    setup({ state: "ready", stories: [logout] });
+    renderAt();
+    await screen.findByText("Logout");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Logout" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: " " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save story" }));
+    const form = screen.getByRole("form", { name: "Edit story" });
+    expect((await within(form).findByRole("alert")).textContent).toContain("name must not be empty");
+  });
+
+  it("presents finished and cancelled stories as read-only, with no edit button", async () => {
+    const dropped = story({ id: 4, epic_id: 1, name: "Dropped", state: "cancelled" });
+    setup({ state: "ready", stories: [login, logout, dropped] });
+    renderAt();
+    await screen.findByText("Logout");
+
+    for (const name of ["Login", "Dropped"]) {
+      expect(within(cardOf(name)).getByText("read-only")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: `Edit ${name}` })).toBeNull();
+    }
+    expect(screen.getByRole("button", { name: "Edit Logout" })).toBeTruthy();
+    expect(within(cardOf("Logout")).queryByText("read-only")).toBeNull();
+  });
+
+  it("edits only one story at a time", async () => {
+    setup({ state: "ready", stories: [logout, invoice] });
+    renderAt();
+    await screen.findByText("Logout");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Logout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Invoice list" }));
+    const forms = screen.getAllByRole("form", { name: "Edit story" });
+    expect(forms).toHaveLength(1);
+    expect((within(forms[0]).getByLabelText("Name") as HTMLInputElement).value).toBe("Invoice list");
   });
 });
