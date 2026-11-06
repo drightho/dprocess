@@ -14,14 +14,14 @@ Work in progress. Implemented so far:
 
 - Server scaffold, embedded SQLite with migrations, health endpoint
 - Projects CRUD (`/api/v1/projects`)
-- Epics CRUD, state transitions and history (provisional transition rules)
+- Epics CRUD, state transitions and history
 - Stories CRUD, state transitions, history and the 400 LOC warning
 - Story dependencies with same-project and cycle checks
 - Tags and comments on epics and stories; GitHub issue references
 - OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
 - Web UI scaffold (React + TypeScript + Vite) embedded in the binary; it currently lists and creates projects
 
-Planned: the full web UI for projects, epics and stories. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
+Planned: the full web UI for projects, epics and stories. All state-transition rules for epics and stories are defined and enforced.
 
 ## Architecture
 
@@ -106,7 +106,18 @@ Issues accept only URLs of the form `https://github.com/{owner}/{repo}/issues/{n
 
 An `estimate_loc` above 400 is accepted, and the story response then carries `"warnings": ["estimate_exceeds_400_loc"]`. A story's epic cannot be changed after creation, and deleting a story that other stories depend on returns 409.
 
-An epic's or story's state cannot be changed with PATCH, only through `transition`. An illegal transition returns 409 and an unknown state returns 422. The transition rules are currently provisional: one step forward along the state order (epics: `draft, review, ready, finished`; stories: `draft, review, design, implementation, testing, finished`), or `cancelled` from any non-terminal state.
+An epic's or story's state cannot be changed with PATCH, only through `transition`. An illegal transition returns 409 and an unknown state returns 422.
+
+**Epic rules:** an epic starts in `draft` and moves forward only: `draft` to `review` to `ready` to `finished`. It can be `cancelled` from `draft`, `review` or `ready`; `finished` and `cancelled` are final. Two rules involve its stories:
+
+- To finish, every story must be `finished` or `cancelled` and at least one must be `finished` (409 otherwise; the message names the blocking stories).
+- Cancelling an epic cancels all of its stories that are not already `finished` or `cancelled`, in the same transaction. Each cancelled story gets a history entry with the reason `epic N cancelled: ...`. Finished stories stay finished.
+- A `finished` or `cancelled` epic accepts no new stories (409).
+
+**Story rules:** a story starts in `draft` and normally moves forward: `draft`, `review`, `design`, `implementation`, `testing`, `finished`. It can also step back from `implementation` to `design`, and from `testing` to `implementation` or `design`. It can be `cancelled` from any state except `finished`; `finished` and `cancelled` are final. Two rules involve other records (both answer 409 with an explanatory message):
+
+- A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation` and `testing`.) Cancelling is never gated.
+- A story can move to `finished` only when every story it depends on is `finished`. A cancelled dependency does not count; remove the dependency or cancel the story instead.
 
 Errors are returned as `application/problem+json` documents (`title`, `status`, `detail`):
 
@@ -139,6 +150,6 @@ api/                     openapi.yaml and the Go package that embeds it
 web/                     React + TypeScript + Vite app (src/), embed.go embeds the built dist/
 internal/store/          SQLite access, embedded migrations (migrations/*.sql)
 internal/service/        business rules (state transitions)
-internal/workflow/       epic and story state machines (provisional rules)
+internal/workflow/       epic and story state machines
 internal/api/            HTTP handlers, JSON and error helpers, UI/SPA serving
 ```

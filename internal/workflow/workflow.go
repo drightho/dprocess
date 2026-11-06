@@ -1,9 +1,18 @@
 // Package workflow defines the state machines for epics and stories.
 //
-// PROVISIONAL: the detailed transition rules have not been specified yet.
-// The tables below allow moving forward one step along the listed order and
-// cancelling from any non-terminal state. Replace the tables (and add guards)
-// once the real rules are supplied; nothing else should need to change.
+// Epic: the transition table is final. An epic moves one step forward
+// (draft -> review -> ready -> finished) and may be cancelled from draft,
+// review or ready; finished and cancelled are final. The rules that need data
+// (finishing requires finished/cancelled stories, cancelling cascades to
+// stories) live in package service.
+//
+// Story: the transition table is final. A story moves forward
+// (draft -> review -> design -> implementation -> testing -> finished), may
+// step back from implementation to design and from testing to implementation
+// or design, and may be cancelled from any state except finished; finished
+// and cancelled are final. The rules that need data (the epic's state gates
+// review/design, finishing requires finished dependencies) live in package
+// service.
 package workflow
 
 import (
@@ -72,4 +81,14 @@ func newLinear(order []string) *Machine {
 var Epic = newLinear([]string{"draft", "review", "ready", "finished"})
 
 // Story is the story state machine.
-var Story = newLinear([]string{"draft", "review", "design", "implementation", "testing", "finished"})
+var Story = &Machine{
+	Initial: "draft",
+	States:  []string{"draft", "review", "design", "implementation", "testing", "finished", "cancelled"},
+	transitions: map[string][]string{
+		"draft":          {"review", "cancelled"},
+		"review":         {"design", "cancelled"},
+		"design":         {"implementation", "cancelled"},
+		"implementation": {"testing", "design", "cancelled"},
+		"testing":        {"finished", "implementation", "design", "cancelled"},
+	},
+}

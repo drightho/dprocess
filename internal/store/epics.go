@@ -147,42 +147,91 @@ func (s *Store) DeleteEpic(id int64) error {
 	return tx.Commit()
 }
 
-// TransitionEpic moves an epic to a new state. check is called with the
-// current and requested state inside the transaction and may veto the move.
-// The change and its history row are written atomically.
-func (s *Store) TransitionEpic(id int64, to, reason, actor string, check func(from, to string) error) (*Epic, error) {
-	if err := s.transition("epic", "epics", id, to, reason, actor, check); err != nil {
-		return nil, err
-	}
-	return s.GetEpic(id)
+// StoryChange is a state change applied to a story as a side effect of an
+// epic transition (e.g. cancelling the epic cancels its stories).
+type StoryChange struct {
+	ID     int64
+	To     string
+	Reason string
 }
 
-// transition is shared by epics and stories.
-func (s *Store) transition(entityType, table string, id int64, to, reason, actor string, check func(from, to string) error) error {
+// EpicPolicy decides whether an epic may leave state from, given its current
+// stories. It returns the story changes to apply in the same transaction, or
+// an error to veto the transition. It runs inside the transaction, so the
+// stories it sees cannot change before the epic does.
+type EpicPolicy func(from string, stories []StoryRef) ([]StoryChange, error)
+
+// TransitionEpic moves an epic to a new state. policy is consulted first; the
+// epic change, any cascaded story changes and all their history rows are
+// written atomically.
+func (s *Store) TransitionEpic(id int64, to, reason, actor string, policy EpicPolicy) (*Epic, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 
 	var from string
-	if err := tx.QueryRow(`SELECT state FROM `+table+` WHERE id = ?`, id).Scan(&from); err != nil {
+	if err := tx.QueryRow(`SELECT state FROM epics WHERE id = ?`, id).Scan(&from); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+			return nil, ErrNotFound
 		}
-		return err
+		return nil, err
 	}
-	if err := check(from, to); err != nil {
-		return err
+
+	rows, err := tx.Query(`SELECT id, epic_id, name, state FROM stories WHERE epic_id = ? ORDER BY id`, id)
+	if err != nil {
+		return nil, err
 	}
-	if _, err := tx.Exec(`UPDATE `+table+` SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`, to, id); err != nil {
-		return err
+	stories := []StoryRef{}
+	for rows.Next() {
+		var r StoryRef
+		if err := rows.Scan(&r.ID, &r.EpicID, &r.Name, &r.State); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		stories = append(stories, r)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	changes, err := policy(from, stories)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(`UPDATE epics SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`, to, id); err != nil {
+		return nil, err
 	}
 	if _, err := tx.Exec(`INSERT INTO state_history(entity_type, entity_id, from_state, to_state, reason, actor)
-		VALUES (?, ?, ?, ?, ?, ?)`, entityType, id, from, to, reason, actor); err != nil {
-		return err
+		VALUES ('epic', ?, ?, ?, ?, ?)`, id, from, to, reason, actor); err != nil {
+		return nil, err
 	}
-	return tx.Commit()
+
+	current := make(map[int64]string, len(stories))
+	for _, st := range stories {
+		current[st.ID] = st.State
+	}
+	for _, c := range changes {
+		storyFrom, ok := current[c.ID]
+		if !ok {
+			return nil, fmt.Errorf("epic %d: cascade targets story %d which is not in the epic", id, c.ID)
+		}
+		if _, err := tx.Exec(`UPDATE stories SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`, c.To, c.ID); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`INSERT INTO state_history(entity_type, entity_id, from_state, to_state, reason, actor)
+			VALUES ('story', ?, ?, ?, ?, ?)`, c.ID, storyFrom, c.To, c.Reason, actor); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.GetEpic(id)
 }
 
 // HistoryEntry is one recorded state change.

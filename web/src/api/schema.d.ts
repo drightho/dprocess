@@ -147,6 +147,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Move an epic to another state
+         * @description Allowed moves: draft to review, review to ready, ready to finished, and cancelled from draft, review or ready; finished and cancelled are final. Finishing requires every story to be finished or cancelled and at least one to be finished (409 otherwise). Cancelling also cancels every story that is not already finished or cancelled, in the same transaction, with a history entry for each.
+         */
         post: operations["transitionEpic"];
         delete?: never;
         options?: never;
@@ -183,7 +187,7 @@ export interface paths {
         };
         get: operations["listEpicStories"];
         put?: never;
-        /** @description estimate_loc above 400 is accepted; the response then carries the estimate_exceeds_400_loc warning. */
+        /** @description estimate_loc above 400 is accepted; the response then carries the estimate_exceeds_400_loc warning. Finished and cancelled epics accept no new stories (409). */
         post: operations["createStory"];
         delete?: never;
         options?: never;
@@ -261,6 +265,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Move a story to another state
+         * @description Allowed moves: draft, review, design, implementation, testing, finished in that order; back from implementation to design and from testing to implementation or design; cancelled from any state except finished. Finished and cancelled are final. A story can move to review only while its epic is review or ready, and to design (and the states after it) only while its epic is ready. A story can finish only when every story it depends on is finished (409 otherwise; a cancelled dependency does not count).
+         */
         post: operations["transitionStory"];
         delete?: never;
         options?: never;
@@ -1066,6 +1074,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };

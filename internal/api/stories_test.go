@@ -78,7 +78,11 @@ func TestStoryLifecycle(t *testing.T) {
 		t.Fatalf("patch state: %d", resp.StatusCode)
 	}
 
-	// Transitions.
+	// Transitions. A story can only leave draft once its epic is in review.
+	if resp, _ = do(t, "POST", api+"/stories/1/transition", `{"to":"review"}`); resp.StatusCode != 409 {
+		t.Fatalf("story review while epic is draft: %d", resp.StatusCode)
+	}
+	do(t, "POST", api+"/epics/1/transition", `{"to":"review"}`)
 	resp, s = do(t, "POST", api+"/stories/1/transition", `{"to":"review","reason":"r","actor":"ann"}`)
 	if resp.StatusCode != 200 || s["state"] != "review" {
 		t.Fatalf("to review: %d %v", resp.StatusCode, s)
@@ -108,7 +112,10 @@ func TestStoryListingAndFilters(t *testing.T) {
 	st.CreateStory(1, newStory("a", "ann"))
 	st.CreateStory(2, newStory("b", "bob"))
 	st.CreateStory(3, newStory("c", "ann"))
-	do(t, "POST", api+"/stories/2/transition", `{"to":"review"}`)
+	do(t, "POST", api+"/epics/2/transition", `{"to":"review"}`)
+	if resp, _ := do(t, "POST", api+"/stories/2/transition", `{"to":"review"}`); resp.StatusCode != 200 {
+		t.Fatalf("setup transition: %d", resp.StatusCode)
+	}
 
 	count := func(url string) int {
 		t.Helper()
@@ -157,7 +164,10 @@ func TestDeleteStory(t *testing.T) {
 	if resp, _ := do(t, "DELETE", api+"/stories/1", ""); resp.StatusCode != 409 {
 		t.Fatalf("with dependents: %d", resp.StatusCode)
 	}
-	do(t, "POST", api+"/stories/2/transition", `{"to":"review"}`)
+	do(t, "POST", api+"/epics/1/transition", `{"to":"review"}`)
+	if resp, _ := do(t, "POST", api+"/stories/2/transition", `{"to":"review"}`); resp.StatusCode != 200 {
+		t.Fatalf("setup transition: %d", resp.StatusCode)
+	}
 	if resp, _ := do(t, "DELETE", api+"/stories/2", ""); resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}

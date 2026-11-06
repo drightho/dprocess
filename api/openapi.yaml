@@ -4,8 +4,7 @@ info:
   version: 0.1.0
   description: >
     REST API for tracking projects, epics and stories. State changes happen
-    only through the transition endpoints; PATCH never changes state. The
-    transition rules are provisional until the real ones are specified.
+    only through the transition endpoints; PATCH never changes state.
 servers:
   - url: /api/v1
 
@@ -272,6 +271,14 @@ paths:
     post:
       tags: [Epics]
       operationId: transitionEpic
+      summary: Move an epic to another state
+      description: >
+        Allowed moves: draft to review, review to ready, ready to finished,
+        and cancelled from draft, review or ready; finished and cancelled are
+        final. Finishing requires every story to be finished or cancelled and
+        at least one to be finished (409 otherwise). Cancelling also cancels
+        every story that is not already finished or cancelled, in the same
+        transaction, with a history entry for each.
       requestBody:
         required: true
         content:
@@ -324,7 +331,8 @@ paths:
       operationId: createStory
       description: >
         estimate_loc above 400 is accepted; the response then carries the
-        estimate_exceeds_400_loc warning.
+        estimate_exceeds_400_loc warning. Finished and cancelled epics accept
+        no new stories (409).
       requestBody:
         required: true
         content:
@@ -340,6 +348,7 @@ paths:
               schema: { $ref: "#/components/schemas/Story" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   /epics/{id}/tags/{tag}:
@@ -447,6 +456,16 @@ paths:
     post:
       tags: [Stories]
       operationId: transitionStory
+      summary: Move a story to another state
+      description: >
+        Allowed moves: draft, review, design, implementation, testing,
+        finished in that order; back from implementation to design and from
+        testing to implementation or design; cancelled from any state except
+        finished. Finished and cancelled are final. A story can move to review
+        only while its epic is review or ready, and to design (and the states
+        after it) only while its epic is ready. A story can finish only when
+        every story it depends on is finished (409 otherwise; a cancelled
+        dependency does not count).
       requestBody:
         required: true
         content:

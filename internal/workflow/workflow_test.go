@@ -30,22 +30,54 @@ func TestEpicTransitions(t *testing.T) {
 }
 
 func TestStoryTransitions(t *testing.T) {
-	path := []string{"draft", "review", "design", "implementation", "testing", "finished"}
-	for i := 0; i < len(path)-1; i++ {
-		if err := Story.Check(path[i], path[i+1]); err != nil {
-			t.Errorf("%s -> %s: %v", path[i], path[i+1], err)
+	// The complete set of legal moves; every other pair must be rejected.
+	legal := map[string][]string{
+		"draft":          {"review", "cancelled"},
+		"review":         {"design", "cancelled"},
+		"design":         {"implementation", "cancelled"},
+		"implementation": {"testing", "design", "cancelled"}, // may step back to design
+		"testing":        {"finished", "implementation", "design", "cancelled"},
+	}
+	allowed := func(from, to string) bool {
+		for _, x := range legal[from] {
+			if x == to {
+				return true
+			}
 		}
-		if err := Story.Check(path[i], "cancelled"); err != nil {
-			t.Errorf("%s -> cancelled: %v", path[i], err)
+		return false
+	}
+	for _, from := range Story.States {
+		for _, to := range Story.States {
+			err := Story.Check(from, to)
+			if allowed(from, to) && err != nil {
+				t.Errorf("%s -> %s should be legal: %v", from, to, err)
+			}
+			if !allowed(from, to) && !errors.Is(err, ErrIllegalTransition) {
+				t.Errorf("%s -> %s should be illegal, got %v", from, to, err)
+			}
 		}
 	}
-	if err := Story.Check("draft", "design"); !errors.Is(err, ErrIllegalTransition) {
-		t.Errorf("skip: %v", err)
+	if err := Story.Check("draft", "ready"); !errors.Is(err, ErrUnknownState) {
+		t.Errorf("epic-only state: %v", err)
 	}
-	if got := Story.Targets("finished"); len(got) != 0 {
-		t.Errorf("finished targets: %v", got)
+	if Story.Initial != "draft" {
+		t.Errorf("initial: %s", Story.Initial)
 	}
-	if got := Epic.Targets("draft"); len(got) != 2 || got[0] != "review" {
-		t.Errorf("draft targets: %v", got)
+	// finished and cancelled are final.
+	for _, s := range []string{"finished", "cancelled"} {
+		if got := Story.Targets(s); len(got) != 0 {
+			t.Errorf("%s targets: %v", s, got)
+		}
+	}
+	// Forward move comes first, cancel last: handy for UIs.
+	got := Story.Targets("testing")
+	if len(got) != 4 || got[0] != "finished" || got[3] != "cancelled" {
+		t.Errorf("testing targets: %v", got)
+	}
+}
+
+func TestEpicInitialState(t *testing.T) {
+	if Epic.Initial != "draft" {
+		t.Errorf("initial: %s", Epic.Initial)
 	}
 }
