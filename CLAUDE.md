@@ -43,7 +43,9 @@ Guidance for working on DProcess. See `README.md` for the project overview and u
 - TypeScript is pinned to 5.x on purpose: `openapi-typescript` needs the TS 5 compiler API and crashes on TS 7.
 - `web/embed.go` embeds `web/dist` (`//go:embed all:dist`). `web/dist/.gitkeep` is committed so Go compiles before the UI is built; the Vite config re-creates it after each build because Vite empties `dist/`. Never commit other `dist/` files.
 - The server (`internal/api/ui.go`) serves the UI at `/` with fallback to `index.html` for extension-less paths; unknown `/api/` paths return a JSON 404, never HTML.
-- Frontend tests mock `globalThis.fetch` (`vi.stubGlobal`); see `web/src/pages/ProjectsPage.test.tsx`.
+- Frontend tests mock `globalThis.fetch` (`vi.stubGlobal`). Use `mockApi({path: body | Response | fn})` and the `epic()`/`story()` builders from `web/src/test/fixtures.ts`; see `web/src/pages/ProjectPage.test.tsx`. `make check` runs them.
+- Routes: `/` (project list), `/projects/:projectId` (overview: epic list + story board). The overview loads a project's epics and stories once and filters in the browser; filters live in the URL (`?epic=&assignee=&tag=`, parsed by `lib/board.ts`, which ignores values that match nothing). Keep grouping/filtering logic in `lib/board.ts` (pure, unit-tested) and rendering in `components/`.
+- Verify layout changes in a real browser, not only with vitest: build with `make web`, run the server, and screenshot with `google-chrome --headless=new --no-sandbox --virtual-time-budget=6000 --screenshot=out.png <url>`.
 
 ## Conventions
 
@@ -61,6 +63,6 @@ Done: scaffold + migrations + health; projects CRUD; epics CRUD + `internal/work
 Also done: stories CRUD, transitions, history, LOC warning (`service.StoryWarnings`). A story's epic cannot be changed after creation; deleting a story that others depend on returns 409.
 Also done: story dependencies. Their invariants (same project, no self-dependency, no cycle via a recursive CTE) live in `store.AddDependency` rather than `service` because the check and insert must share one transaction.
 Also done: tags, comments, GitHub issue references. Tag rules live in `service.NormalizeTag`; issue URL rules in `service.ParseIssueURL` (only `https://github.com/{owner}/{repo}/issues/{n}` is accepted, stored canonical/lower-case, unique per project via migration `0002`).
-Also done: OpenAPI spec + generated types, frontend scaffold (projects list/create page, health badge), UI embedded in the binary.
+Also done: OpenAPI spec + generated types, frontend scaffold (projects list/create page, health badge), UI embedded in the binary, project overview page (story 26).
 Also done: final epic transition rules (finish guard, cancel cascade, no stories in closed epics) and final story transition rules (epic gates, backward moves, finish needs finished dependencies).
-Next: full UI (project/epic/story pages, transition controls, dependencies, history, comments, tags, issues); real transition rules; packaging and hardening.
+Next: rest of the UI (create/edit forms, epic page, story detail, dependency picker, tags/comments, issues/PRs, landing page - tracked as stories in the DProcess project in dprocess.db); real transition rules; packaging and hardening.

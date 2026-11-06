@@ -39,6 +39,8 @@ describe("ProjectsPage", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderPage();
     expect(await screen.findByText("Alpha")).toBeTruthy();
+    // Each project links to its overview page.
+    expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("/projects/1");
     const req = fetchMock.mock.calls[0][0];
     expect(new URL(req.url).pathname).toBe("/api/v1/projects");
   });

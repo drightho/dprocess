@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "./api/client";
+import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
 
 function HealthBadge() {
@@ -15,7 +16,7 @@ function HealthBadge() {
 
 function NotFound() {
   return (
-    <section>
+    <section className="narrow">
       <h2>Page not found</h2>
       <p>
         <Link to="/">Back to projects</Link>
@@ -36,6 +37,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
+          <Route path="/projects/:projectId" element={<ProjectPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, unwrap } from "../api/client";
 
 export default function ProjectsPage() {
@@ -28,7 +29,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <section>
+    <section className="narrow">
       <h1>Projects</h1>
 
       {projects.isPending && <p>Loading...</p>}
@@ -41,7 +42,9 @@ export default function ProjectsPage() {
       <ul className="cards">
         {projects.data?.map((p) => (
           <li key={p.id}>
-            <strong>{p.name}</strong>
+            <Link to={`/projects/${p.id}`}>
+              <strong>{p.name}</strong>
+            </Link>
             {p.description && <p>{p.description}</p>}
           </li>
         ))}

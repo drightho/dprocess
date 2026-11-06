@@ -19,9 +19,9 @@ Work in progress. Implemented so far:
 - Story dependencies with same-project and cycle checks
 - Tags and comments on epics and stories; GitHub issue references; GitHub pull request links on stories
 - OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
-- Web UI scaffold (React + TypeScript + Vite) embedded in the binary; it currently lists and creates projects
+- Web UI (React + TypeScript + Vite) embedded in the binary: a project list/create page and a project overview page at `/projects/{id}` (epics with state and progress, and a story board with one column per state, filterable by epic, assignee and tag)
 
-Planned: the full web UI for projects, epics and stories. All state-transition rules for epics and stories are defined and enforced.
+Planned: the rest of the web UI (epic and story pages, forms, transitions, dependencies, tags, comments, issues and pull requests, landing page). All state-transition rules for epics and stories are defined and enforced.
 
 ## Architecture
 

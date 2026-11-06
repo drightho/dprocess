@@ -5,6 +5,16 @@
   --border: #d0d4d9;
   --accent: #1a56db;
   --bad: #b3261e;
+  --warn: #8a5a00;
+  --surface: #f6f7f9;
+  --st-draft: #5f6368;
+  --st-review: #9a5b00;
+  --st-ready: #0f766e;
+  --st-design: #6d28d9;
+  --st-implementation: #1d4ed8;
+  --st-testing: #0e7490;
+  --st-finished: #15803d;
+  --st-cancelled: #b3261e;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -15,6 +25,16 @@
     --border: #3a3f45;
     --accent: #8ab4f8;
     --bad: #f2b8b5;
+    --warn: #f0c36b;
+    --surface: #1d2024;
+    --st-draft: #9aa0a6;
+    --st-review: #f0b252;
+    --st-ready: #5eead4;
+    --st-design: #c4b5fd;
+    --st-implementation: #93b4ff;
+    --st-testing: #67e8f9;
+    --st-finished: #86efac;
+    --st-cancelled: #f2b8b5;
   }
 }
 * { box-sizing: border-box; }
@@ -35,7 +55,8 @@ a { color: var(--accent); }
 .brand { font-weight: 700; text-decoration: none; color: inherit; }
 .badge { font-size: 0.8rem; color: var(--muted); }
 .badge.bad, .error { color: var(--bad); }
-main { max-width: 52rem; margin: 0 auto; padding: 1rem; }
+main { max-width: 90rem; margin: 0 auto; padding: 1rem; }
+.narrow { max-width: 52rem; }
 .cards { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
 .cards li { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; }
 .cards p { margin: 0.25rem 0 0; color: var(--muted); }
@@ -44,3 +65,59 @@ label { display: grid; gap: 0.25rem; }
 input, textarea, button { font: inherit; padding: 0.4rem 0.6rem; }
 input, textarea { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
 button { width: fit-content; cursor: pointer; }
+
+.meta { color: var(--muted); font-size: 0.85rem; }
+.empty { color: var(--muted); }
+.warning { color: var(--warn); font-size: 0.85rem; }
+
+.badge.state {
+  --st: var(--st-draft);
+  display: inline-block;
+  padding: 0 0.5rem;
+  border: 1px solid var(--st);
+  border-radius: 999px;
+  color: var(--st);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-transform: lowercase;
+}
+.badge.state[data-state="review"] { --st: var(--st-review); }
+.badge.state[data-state="ready"] { --st: var(--st-ready); }
+.badge.state[data-state="design"] { --st: var(--st-design); }
+.badge.state[data-state="implementation"] { --st: var(--st-implementation); }
+.badge.state[data-state="testing"] { --st: var(--st-testing); }
+.badge.state[data-state="finished"] { --st: var(--st-finished); }
+.badge.state[data-state="cancelled"] { --st: var(--st-cancelled); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.chip {
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.epics { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
+.epic {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.epic.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.epic-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; max-width: none; margin-bottom: 1rem; }
+select { font: inherit; padding: 0.35rem 0.5rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; }
+.column { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; min-width: 0; }
+.column h3 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 0.5rem; font-size: 1rem; }
+.count { color: var(--muted); font-size: 0.85rem; }
+.cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.card { display: grid; gap: 0.25rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.65rem; overflow-wrap: anywhere; }
