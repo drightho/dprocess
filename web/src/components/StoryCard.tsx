@@ -17,7 +17,9 @@ export default function StoryCard({ story, epic, showState = false, actions }: P
   return (
     <li className="card">
       <span className="card-head">
-        <strong>{story.name}</strong>
+        <strong>
+          <Link to={`/stories/${story.id}`}>{story.name}</Link>
+        </strong>
         {showState && <StateBadge state={story.state} />}
       </span>
       <span className="meta">

@@ -36,6 +36,7 @@ export default function StoryForm({ epicId, story, onDone, onCancel }: Props) {
     },
     onSuccess: async (saved) => {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["story", saved.id] }),
         queryClient.invalidateQueries({ queryKey: ["epic", saved.epic_id] }),
         queryClient.invalidateQueries({ queryKey: ["project", saved.project_id] }),
       ]);

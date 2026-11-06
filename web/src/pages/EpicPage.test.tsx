@@ -157,6 +157,14 @@ describe("EpicPage content", () => {
     expect(items[2].textContent).toContain("2026-01-01 00:00 UTC");
   });
 
+  it("links each story to its page", async () => {
+    setup({ stories: [login, logout] });
+    renderAt();
+    await screen.findByText("Logout");
+    expect(screen.getByRole("link", { name: "Logout" }).getAttribute("href")).toBe("/stories/2");
+    expect(screen.getByRole("link", { name: "Login" }).getAttribute("href")).toBe("/stories/1");
+  });
+
   it("handles an epic with no stories and no history", async () => {
     setup();
     renderAt();
