@@ -176,6 +176,18 @@ describe("ProjectPage filters", () => {
     expect(options("Epic")).toEqual(["All epics", "Auth", "Billing"]);
   });
 
+  it("filters the board when a tag chip on a card is clicked", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    const chip = within(screen.getByText("Invoice list").closest("li")!).getByRole("link", { name: "frontend" });
+    expect(chip.getAttribute("href")).toBe("/projects/1?tag=frontend");
+    fireEvent.click(chip);
+    await waitFor(() => expect(location()).toBe("/projects/1?tag=frontend"));
+    expect(cardNames()).toEqual(["Invoice list"]);
+    expect((screen.getByLabelText("Tag") as HTMLSelectElement).value).toBe("frontend");
+  });
+
   it("toggles the epic filter by clicking an epic", async () => {
     mockApi(fullRoutes);
     renderAt("/projects/1");

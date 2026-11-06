@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import StoryPage from "./StoryPage";
-import { epic, historyEntry, mockApi, problem, story, storyDetail, storyRef, type HistoryEntry, type Story, type StoryDetail } from "../test/fixtures";
+import { comment, epic, historyEntry, json, mockApi, problem, story, storyDetail, storyRef, type Comment, type HistoryEntry, type Story, type StoryDetail } from "../test/fixtures";
 
 type StoryState = StoryDetail["state"];
 
@@ -36,6 +36,9 @@ function setup(init: Setup = {}) {
     posts: [] as { to: string; reason?: string }[],
     patches: [] as Record<string, unknown>[],
     deps: [] as { method: string; id: number }[],
+    tagCalls: [] as string[],
+    comments: [] as Comment[],
+    commentPosts: [] as Record<string, unknown>[],
   };
   const others = init.others ?? [];
   const view = () => ({ ...w.story, allowed_transitions: allowed[w.story.state as StoryState] });
@@ -72,6 +75,26 @@ function setup(init: Setup = {}) {
       return view();
     },
     "/api/v1/stories/1/history": () => w.history,
+    // Comments: stateful, like the real server.
+    "/api/v1/stories/1/comments": async (req: Request) => {
+      if (req.method === "GET") return w.comments;
+      const body = (await req.json()) as Record<string, unknown>;
+      w.commentPosts.push(body);
+      const created = comment({ id: w.comments.length + 1, body: String(body.body), author: String(body.author ?? "") });
+      w.comments = [...w.comments, created];
+      return json(created, 201);
+    },
+    // Tags: "newtag" can be added, "backend" removed.
+    "/api/v1/stories/1/tags/newtag": async (req: Request) => {
+      w.tagCalls.push(req.method);
+      w.story = { ...w.story, tags: [...w.story.tags, "newtag"] };
+      return view();
+    },
+    "/api/v1/stories/1/tags/backend": async (req: Request) => {
+      w.tagCalls.push(req.method);
+      w.story = { ...w.story, tags: w.story.tags.filter((t) => t !== "backend") };
+      return new Response(null, { status: 204 });
+    },
     "/api/v1/epics/1": { ...epic({ id: 1, project_id: 1, name: "Auth" }), allowed_transitions: [] },
     "/api/v1/stories/1/transition": async (req: Request) => {
       const body = (await req.json()) as { to: string; reason?: string };
@@ -130,9 +153,12 @@ describe("StoryPage content", () => {
     expect((await screen.findByRole("link", { name: /Auth/ })).getAttribute("href")).toBe("/epics/1");
     expect(screen.getByText("Story #1")).toBeTruthy();
     const dl = document.querySelector("dl.fields")!.textContent ?? "";
-    for (const text of ["A login form", "Users can sign in", "ann", "450 lines of code", "Estimate is over 400 lines", "backend", "api"]) {
+    for (const text of ["A login form", "Users can sign in", "ann", "450 lines of code", "Estimate is over 400 lines"]) {
       expect(dl).toContain(text);
     }
+    const tagsText = screen.getByRole("region", { name: "Tags" }).textContent ?? "";
+    expect(tagsText).toContain("backend");
+    expect(tagsText).toContain("api");
 
     // Both directions of the dependency relation, as links with states.
     const sessions = screen.getByRole("link", { name: "#5 Sessions" });
@@ -168,7 +194,8 @@ describe("StoryPage content", () => {
     expect(screen.getByText("No estimate")).toBeTruthy();
     expect(screen.getByText("This story depends on no other story.")).toBeTruthy();
     expect(screen.getByText("No story depends on this one.")).toBeTruthy();
-    expect(screen.queryByText("Tags")).toBeNull();
+    expect(screen.getByText("No tags yet.")).toBeTruthy();
+    expect(await screen.findByText("No comments yet.")).toBeTruthy();
   });
 
   it("does not warn about an estimate within the limit", async () => {
@@ -379,6 +406,7 @@ describe("StoryPage errors", () => {
     mockApi({
       "/api/v1/stories/1": () => (healthy ? { ...storyDetail({ id: 1, name: "Login" }), allowed_transitions: [] } : problem(500, "internal error", "database is on fire")),
       "/api/v1/stories/1/history": [],
+      "/api/v1/stories/1/comments": [],
       "/api/v1/epics/1": { ...epic({ id: 1, name: "Auth" }), allowed_transitions: [] },
       "/api/v1/projects/1/stories": [],
       "/api/v1/projects/1/epics": [],
@@ -394,6 +422,7 @@ describe("StoryPage errors", () => {
     mockApi({
       "/api/v1/stories/1": { ...storyDetail({ id: 1, name: "Login" }), allowed_transitions: ["review", "cancelled"] },
       "/api/v1/stories/1/history": problem(500, "internal error", "history is broken"),
+      "/api/v1/stories/1/comments": [],
       "/api/v1/epics/1": { ...epic({ id: 1, name: "Auth" }), allowed_transitions: [] },
       "/api/v1/projects/1/stories": [],
       "/api/v1/projects/1/epics": [],
@@ -408,6 +437,7 @@ describe("StoryPage errors", () => {
     mockApi({
       "/api/v1/stories/1": { ...storyDetail({ id: 1, epic_id: 4, name: "Login" }), allowed_transitions: [] },
       "/api/v1/stories/1/history": [],
+      "/api/v1/stories/1/comments": [],
       "/api/v1/epics/4": problem(500, "internal error", "x"),
       "/api/v1/projects/1/stories": [],
       "/api/v1/projects/1/epics": [],
@@ -553,6 +583,7 @@ describe("StoryPage dependencies", () => {
     mockApi({
       "/api/v1/stories/1": { ...storyDetail({ id: 1, epic_id: 1, project_id: 1, name: "Login", state: "design" }), allowed_transitions: [] },
       "/api/v1/stories/1/history": [],
+      "/api/v1/stories/1/comments": [],
       "/api/v1/epics/1": { ...epic({ id: 1, name: "Auth" }), allowed_transitions: [] },
       "/api/v1/projects/1/stories": [emails],
       "/api/v1/projects/1/epics": [epic({ id: 1, project_id: 1, name: "Auth" })],
@@ -607,6 +638,7 @@ describe("StoryPage dependencies", () => {
     mockApi({
       "/api/v1/stories/1": { ...storyDetail({ id: 1, epic_id: 1, project_id: 1, name: "Login", state: "design", depends_on: [storyRef({ id: 2, name: "Sessions", state: "finished" })] }), allowed_transitions: [] },
       "/api/v1/stories/1/history": [],
+      "/api/v1/stories/1/comments": [],
       "/api/v1/epics/1": { ...epic({ id: 1, name: "Auth" }), allowed_transitions: [] },
       "/api/v1/projects/1/stories": problem(500, "internal error", "stories are broken"),
       "/api/v1/projects/1/epics": [],
@@ -617,4 +649,43 @@ describe("StoryPage dependencies", () => {
     expect(screen.getByRole("link", { name: "#2 Sessions" })).toBeTruthy();
     expect(screen.queryByRole("form", { name: "Add dependency" })).toBeNull();
   });
+});
+
+describe("StoryPage tags and comments", () => {
+  const tagNames = () => within(screen.getByRole("region", { name: "Tags" })).queryAllByRole("listitem").map((li) => li.textContent?.replace("×", "").trim());
+
+  it("shows the tags as links that filter the project's board, and the comments oldest first", async () => {
+    const { w } = setup({ story: { tags: ["backend", "api"] } });
+    w.comments = [comment({ id: 1, author: "ann", body: "First" }), comment({ id: 2, author: "bob", body: "Second" })];
+    renderAt();
+    await loaded();
+    expect(screen.getByRole("link", { name: "backend" }).getAttribute("href")).toBe("/projects/1?tag=backend");
+    const thread = await screen.findByRole("list", { name: "Comment thread" });
+    expect(within(thread).getAllByRole("listitem").map((li) => li.textContent)).toEqual([expect.stringContaining("First"), expect.stringContaining("Second")]);
+  });
+
+  for (const state of ["finished", "cancelled"] as const) {
+    it(`keeps tags and comments usable on a ${state} story`, async () => {
+      const { w } = setup({ story: { state, tags: ["backend"] } });
+      renderAt();
+      await loaded();
+      expect(button("Edit story")).toBeNull(); // the story itself is read-only...
+
+      // ...but tags can be added and removed...
+      fireEvent.change(screen.getByLabelText("New tag"), { target: { value: "newtag" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add tag" }));
+      await waitFor(() => expect(tagNames()).toEqual(["backend", "newtag"]));
+      fireEvent.click(screen.getByRole("button", { name: "Remove tag backend" }));
+      await waitFor(() => expect(tagNames()).toEqual(["newtag"]));
+      expect(w.tagCalls).toEqual(["PUT", "DELETE"]);
+
+      // ...and comments can be added.
+      fireEvent.change(screen.getByLabelText("Author"), { target: { value: "ann" } });
+      fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Retrospective note" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+      const thread = await screen.findByRole("list", { name: "Comment thread" });
+      expect(thread.textContent).toContain("Retrospective note");
+      expect(w.commentPosts).toEqual([{ body: "Retrospective note", author: "ann" }]);
+    });
+  }
 });

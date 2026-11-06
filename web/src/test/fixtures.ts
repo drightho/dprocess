@@ -52,6 +52,12 @@ export function storyDetail(over: Partial<StoryDetail> = {}): StoryDetail {
   return { ...story(), depends_on: [], dependents: [], issues: [], pull_requests: [], ...over } as StoryDetail;
 }
 
+export type Comment = Schemas["Comment"];
+
+export function comment(over: Partial<Comment> = {}): Comment {
+  return { id: 1, entity_type: "story", entity_id: 1, body: "A comment", author: "", created_at: "2026-01-02T03:04:05.000Z", ...over };
+}
+
 export type HistoryEntry = Schemas["HistoryEntry"];
 
 export function historyEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {

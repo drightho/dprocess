@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import EpicPage from "./EpicPage";
-import { epic, historyEntry, json, mockApi, problem, project, story, type HistoryEntry, type Story } from "../test/fixtures";
+import { comment, epic, historyEntry, json, mockApi, problem, project, story, type Comment, type HistoryEntry, type Story } from "../test/fixtures";
 
 type EpicState = "draft" | "review" | "ready" | "finished" | "cancelled";
 
@@ -31,6 +31,8 @@ function setup(init: Setup = {}) {
     history: init.history ?? [],
     posts: [] as { to: string; reason?: string }[],
     writes: [] as { method: string; path: string; body: Record<string, unknown> }[],
+    tagCalls: [] as string[],
+    comments: [] as Comment[],
   };
   const withWarnings = (s: Story): Story => ({ ...s, warnings: s.estimate_loc !== null && s.estimate_loc > 400 ? ["estimate_exceeds_400_loc"] : [] });
   const bodyOf = async (req: Request, path: string) => {
@@ -77,6 +79,23 @@ function setup(init: Setup = {}) {
       return json(created, 201);
     },
     "/api/v1/epics/1/history": () => w.history,
+    "/api/v1/epics/1/comments": async (req: Request) => {
+      if (req.method === "GET") return w.comments;
+      const body = (await req.json()) as Record<string, unknown>;
+      const created = comment({ id: w.comments.length + 1, entity_type: "epic", body: String(body.body), author: String(body.author ?? "") });
+      w.comments = [...w.comments, created];
+      return json(created, 201);
+    },
+    "/api/v1/epics/1/tags/newtag": async (req: Request) => {
+      w.tagCalls.push(req.method);
+      w.epic = { ...w.epic, tags: [...w.epic.tags, "newtag"] };
+      return view();
+    },
+    "/api/v1/epics/1/tags/q1": async (req: Request) => {
+      w.tagCalls.push(req.method);
+      w.epic = { ...w.epic, tags: w.epic.tags.filter((t) => t !== "q1") };
+      return new Response(null, { status: 204 });
+    },
     "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
     "/api/v1/epics/1/transition": async (req: Request) => {
       const body = (await req.json()) as { to: string; reason?: string };
@@ -185,6 +204,7 @@ describe("EpicPage content", () => {
       "/api/v1/epics/1": { ...epic({ id: 1, project_id: 1, name: "Auth" }), allowed_transitions: ["review", "cancelled"] },
       "/api/v1/epics/1/stories": [],
       "/api/v1/epics/1/history": problem(500, "internal error", "history is broken"),
+      "/api/v1/epics/1/comments": [],
       "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
     });
     renderAt();
@@ -385,6 +405,7 @@ describe("EpicPage errors", () => {
       "/api/v1/epics/1": () => (healthy ? { ...epic({ id: 1, project_id: 1, name: "Auth" }), allowed_transitions: [] } : problem(500, "internal error", "database is on fire")),
       "/api/v1/epics/1/stories": [],
       "/api/v1/epics/1/history": [],
+      "/api/v1/epics/1/comments": [],
       "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
     });
     renderAt();
@@ -545,5 +566,36 @@ describe("EpicPage forms", () => {
     const forms = screen.getAllByRole("form", { name: "Edit story" });
     expect(forms).toHaveLength(1);
     expect((within(forms[0]).getByLabelText("Name") as HTMLInputElement).value).toBe("Invoice list");
+  });
+});
+
+describe("EpicPage tags and comments", () => {
+  const tagNames = () => within(screen.getByRole("region", { name: "Tags" })).queryAllByRole("listitem").map((li) => li.textContent?.replace("×", "").trim());
+
+  it("shows the epic's tags as links that filter the project's board", async () => {
+    setup();
+    renderAt();
+    await screen.findByRole("heading", { name: "Auth" });
+    expect(screen.getByRole("link", { name: "q1" }).getAttribute("href")).toBe("/projects/1?tag=q1");
+  });
+
+  it("adds and removes tags and posts comments, also on a finished epic", async () => {
+    for (const state of ["draft", "finished"] as const) {
+      const { w } = setup({ state });
+      const { unmount } = renderAt();
+      await screen.findByRole("heading", { name: "Auth" });
+
+      fireEvent.change(screen.getByLabelText("New tag"), { target: { value: "newtag" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add tag" }));
+      await waitFor(() => expect(tagNames()).toEqual(["q1", "newtag"]));
+      fireEvent.click(screen.getByRole("button", { name: "Remove tag q1" }));
+      await waitFor(() => expect(tagNames()).toEqual(["newtag"]));
+      expect(w.tagCalls).toEqual(["PUT", "DELETE"]);
+
+      fireEvent.change(screen.getByLabelText("Comment"), { target: { value: `Note on a ${state} epic` } });
+      fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
+      expect((await screen.findByRole("list", { name: "Comment thread" })).textContent).toContain(`Note on a ${state} epic`);
+      unmount();
+    }
   });
 });

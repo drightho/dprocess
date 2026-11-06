@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, unwrap } from "../api/client";
+import CommentThread from "../components/CommentThread";
 import EpicForm from "../components/EpicForm";
 import HistoryList from "../components/HistoryList";
 import NotFoundNotice from "../components/NotFoundNotice";
 import StateBadge from "../components/StateBadge";
 import StoryCard from "../components/StoryCard";
 import StoryForm from "../components/StoryForm";
+import TagEditor from "../components/TagEditor";
 import TransitionPanel from "../components/TransitionPanel";
 import { epicProgress, isTerminal } from "../lib/board";
 
@@ -89,17 +91,11 @@ export default function EpicPage() {
             </button>
           </div>
           {e.description && <p className="meta">{e.description}</p>}
-          {e.tags.length > 0 && (
-            <p className="chips">
-              {e.tags.map((t) => (
-                <span key={t} className="chip">
-                  {t}
-                </span>
-              ))}
-            </p>
-          )}
         </>
       )}
+
+      <h2>Tags</h2>
+      <TagEditor kind="epic" id={e.id} projectId={e.project_id} tags={e.tags} />
 
       <TransitionPanel epic={e} stories={stories.data} />
 
@@ -151,6 +147,9 @@ export default function EpicPage() {
           </ul>
         </>
       )}
+
+      <h2>Comments</h2>
+      <CommentThread kind="epic" id={e.id} />
 
       <h2>History</h2>
       {history.isError ? (
