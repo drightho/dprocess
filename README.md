@@ -160,18 +160,25 @@ Requirements:
 - Python 3, `git`, `make`, Go and Node.js, as for the project itself, and the GitHub CLI `gh`, signed in, for pull requests.
 - For the browser checks the skill runs on UI stories: `google-chrome`, `sqlite3` and Node.js 22 or newer.
 
-Install from this repository's marketplace, in a Claude Code session:
+Clone the repository first, then install the plugin from the local clone (the marketplace is read from the clone's `.claude-plugin/marketplace.json`, so no GitHub access from Claude Code is needed):
+
+```sh
+git clone https://github.com/drightho/dprocess.git
+cd dprocess
+```
+
+Then, in a Claude Code session (use the path to your clone; `.` is the current directory):
 
 ```
-/plugin marketplace add drightho/dprocess
+/plugin marketplace add ./
 /plugin install dprocess@dprocess-marketplace
 ```
 
-or in one step: `/plugin install dprocess --marketplace drightho/dprocess`. From a shell the same is `claude plugin marketplace add drightho/dprocess` and `claude plugin install dprocess@dprocess-marketplace`, with `--scope user` (all your projects, the default), `--scope project` (everyone who works in a repository; collaborators still install it themselves) or `--scope local` (only you, in one repository). Then run `/reload-plugins` or start a new session; `/plugin` lists what is installed.
+From a shell the same is `claude plugin marketplace add ./` and `claude plugin install dprocess@dprocess-marketplace`, with `--scope user` (all your projects, the default), `--scope project` (everyone who works in a repository; collaborators still install it themselves) or `--scope local` (only you, in one repository). Then run `/reload-plugins` or start a new session; `/plugin` lists what is installed.
 
 To try it from a clone without installing, start Claude Code with `claude --plugin-dir ./plugins/dprocess` (and `/reload-plugins` after editing the plugin). `claude plugin validate ./plugins/dprocess` checks the manifest.
 
-Update with `claude plugin update dprocess@dprocess-marketplace` (users stay on a plugin version until `version` in `plugins/dprocess/.claude-plugin/plugin.json` changes, so bump it when you change the plugin). Remove with `claude plugin uninstall dprocess@dprocess-marketplace`.
+Update with `git pull`, then `claude plugin marketplace update dprocess-marketplace` and `claude plugin update dprocess@dprocess-marketplace` (users stay on a plugin version until `version` in `plugins/dprocess/.claude-plugin/plugin.json` changes, so bump it when you change the plugin). Remove with `claude plugin uninstall dprocess@dprocess-marketplace`.
 
 ### Use
 
