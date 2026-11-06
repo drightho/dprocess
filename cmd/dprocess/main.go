@@ -14,6 +14,7 @@ import (
 
 	"github.com/dright/dprocess/internal/api"
 	"github.com/dright/dprocess/internal/store"
+	"github.com/dright/dprocess/web"
 )
 
 func getenv(key, def string) string {
@@ -36,7 +37,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           (&api.Server{Store: st}).Handler(),
+		Handler:           (&api.Server{Store: st, UI: web.FS()}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

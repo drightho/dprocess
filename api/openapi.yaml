@@ -1,0 +1,858 @@
+openapi: 3.0.3
+info:
+  title: DProcess API
+  version: 0.1.0
+  description: >
+    REST API for tracking projects, epics and stories. State changes happen
+    only through the transition endpoints; PATCH never changes state. The
+    transition rules are provisional until the real ones are specified.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Projects
+  - name: Epics
+  - name: Stories
+  - name: Dependencies
+  - name: Tags
+  - name: Comments
+  - name: Issues
+  - name: System
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Liveness and database check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, example: ok }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List projects ordered by name
+      responses:
+        "200":
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Project" }
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectCreate" }
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /projects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Projects]
+      operationId: getProject
+      responses:
+        "200":
+          description: The project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectUpdate" }
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      summary: Delete a project (409 while it has epics or issues)
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /projects/{id}/epics:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Epics]
+      operationId: listEpics
+      parameters:
+        - name: state
+          in: query
+          schema: { $ref: "#/components/schemas/EpicState" }
+        - $ref: "#/components/parameters/TagFilter"
+      responses:
+        "200":
+          description: Epics of the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Epic" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [Epics]
+      operationId: createEpic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EpicCreate" }
+      responses:
+        "201":
+          description: Created (state is draft)
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /projects/{id}/stories:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Stories]
+      operationId: listProjectStories
+      parameters:
+        - name: state
+          in: query
+          schema: { $ref: "#/components/schemas/StoryState" }
+        - name: epic
+          in: query
+          description: Epic id
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: assignee
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/TagFilter"
+      responses:
+        "200":
+          description: Stories of the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Story" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /projects/{id}/issues:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Issues]
+      operationId: listIssues
+      parameters:
+        - name: story
+          in: query
+          description: Only issues linked to this story id
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200":
+          description: Issue references of the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Issue" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [Issues]
+      operationId: createIssue
+      summary: Reference a GitHub issue
+      description: >
+        Only https://github.com/{owner}/{repo}/issues/{number} URLs are
+        accepted (optional trailing slash; no query string or fragment).
+        Referencing the same issue twice in a project returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueCreate" }
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Issue" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /epics/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Epics]
+      operationId: getEpic
+      responses:
+        "200":
+          description: The epic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epic" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Epics]
+      operationId: updateEpic
+      description: Changes name and description only; state changes use the transition endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EpicUpdate" }
+      responses:
+        "200":
+          description: Updated epic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Epics]
+      operationId: deleteEpic
+      summary: Delete an epic (409 while it has stories)
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /epics/{id}/transition:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Epics]
+      operationId: transitionEpic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EpicTransitionRequest" }
+      responses:
+        "200":
+          description: The epic in its new state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /epics/{id}/history:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Epics]
+      operationId: getEpicHistory
+      responses:
+        "200":
+          description: State changes, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HistoryEntry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /epics/{id}/stories:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Stories]
+      operationId: listEpicStories
+      responses:
+        "200":
+          description: Stories of the epic
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Story" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Stories]
+      operationId: createStory
+      description: >
+        estimate_loc above 400 is accepted; the response then carries the
+        estimate_exceeds_400_loc warning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoryCreate" }
+      responses:
+        "201":
+          description: Created (state is draft)
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Story" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /epics/{id}/tags/{tag}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/Tag"
+    put:
+      tags: [Tags]
+      operationId: addEpicTag
+      summary: Tag an epic (idempotent)
+      responses:
+        "200":
+          description: The epic with its tags
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epic" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Tags]
+      operationId: removeEpicTag
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /epics/{id}/comments:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Comments]
+      operationId: listEpicComments
+      responses:
+        "200":
+          description: Comments, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Comment" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Comments]
+      operationId: addEpicComment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommentCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Comment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /stories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Stories]
+      operationId: getStory
+      responses:
+        "200":
+          description: The story with dependencies and linked issues
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoryDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Stories]
+      operationId: updateStory
+      description: >
+        Absent fields are unchanged. estimate_loc: null clears the estimate.
+        State changes use the transition endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoryUpdate" }
+      responses:
+        "200":
+          description: Updated story
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Story" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Stories]
+      operationId: deleteStory
+      summary: Delete a story (409 while other stories depend on it)
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /stories/{id}/transition:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Stories]
+      operationId: transitionStory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoryTransitionRequest" }
+      responses:
+        "200":
+          description: The story in its new state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Story" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /stories/{id}/history:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Stories]
+      operationId: getStoryHistory
+      responses:
+        "200":
+          description: State changes, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HistoryEntry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stories/{id}/dependencies/{depId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: depId
+        in: path
+        required: true
+        description: The story that {id} depends on
+        schema: { type: integer, format: int64, minimum: 1 }
+    put:
+      tags: [Dependencies]
+      operationId: addDependency
+      summary: Make the story depend on another one (idempotent)
+      description: >
+        Both stories must belong to the same project and be different (422);
+        the dependency must not create a cycle, direct or transitive (409).
+      responses:
+        "200":
+          description: The story with its relations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoryDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Dependencies]
+      operationId: removeDependency
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stories/{id}/tags/{tag}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/Tag"
+    put:
+      tags: [Tags]
+      operationId: addStoryTag
+      summary: Tag a story (idempotent)
+      responses:
+        "200":
+          description: The story with its relations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoryDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Tags]
+      operationId: removeStoryTag
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /stories/{id}/comments:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Comments]
+      operationId: listStoryComments
+      responses:
+        "200":
+          description: Comments, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Comment" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Comments]
+      operationId: addStoryComment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommentCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Comment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /issues/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Issues]
+      operationId: getIssue
+      responses:
+        "200":
+          description: The issue reference
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Issue" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Issues]
+      operationId: updateIssue
+      description: "The GitHub URL is immutable. Setting story_id to null unlinks the issue."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueUpdate" }
+      responses:
+        "200":
+          description: Updated issue
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Issue" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Issues]
+      operationId: deleteIssue
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    Tag:
+      name: tag
+      in: path
+      required: true
+      description: Trimmed and lower-cased; must match ^[a-z0-9][a-z0-9._:-]{0,49}$
+      schema: { type: string }
+    TagFilter:
+      name: tag
+      in: query
+      schema: { type: string }
+
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    BadRequest:
+      description: Malformed JSON or unknown fields
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: Conflicts with current state (illegal transition, cycle, duplicate, record in use)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Unprocessable:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [title, status, detail]
+      properties:
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    EpicState:
+      type: string
+      enum: [draft, review, ready, finished, cancelled]
+    StoryState:
+      type: string
+      enum: [draft, review, design, implementation, testing, finished, cancelled]
+
+    Project:
+      type: object
+      required: [id, name, description, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProjectCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+    ProjectUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+
+    Epic:
+      type: object
+      required: [id, project_id, name, description, state, tags, allowed_transitions, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        project_id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        state: { $ref: "#/components/schemas/EpicState" }
+        tags:
+          type: array
+          items: { type: string }
+        allowed_transitions:
+          type: array
+          items: { $ref: "#/components/schemas/EpicState" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EpicCreate:
+      $ref: "#/components/schemas/ProjectCreate"
+    EpicUpdate:
+      $ref: "#/components/schemas/ProjectUpdate"
+
+    Story:
+      type: object
+      required: [id, project_id, epic_id, name, description, acceptance_criteria, state, estimate_loc, assignee, tags, warnings, allowed_transitions, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        project_id: { type: integer, format: int64 }
+        epic_id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        acceptance_criteria: { type: string }
+        state: { $ref: "#/components/schemas/StoryState" }
+        estimate_loc: { type: integer, format: int64, minimum: 0, nullable: true }
+        assignee: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          description: Non-fatal advisories, e.g. estimate_exceeds_400_loc
+          items: { type: string }
+        allowed_transitions:
+          type: array
+          items: { $ref: "#/components/schemas/StoryState" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    StoryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Story"
+        - type: object
+          required: [depends_on, dependents, issues]
+          properties:
+            depends_on:
+              type: array
+              items: { $ref: "#/components/schemas/StoryRef" }
+            dependents:
+              type: array
+              items: { $ref: "#/components/schemas/StoryRef" }
+            issues:
+              type: array
+              items: { $ref: "#/components/schemas/Issue" }
+    StoryRef:
+      type: object
+      required: [id, epic_id, name, state]
+      properties:
+        id: { type: integer, format: int64 }
+        epic_id: { type: integer, format: int64 }
+        name: { type: string }
+        state: { $ref: "#/components/schemas/StoryState" }
+    StoryCreate:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        acceptance_criteria: { type: string }
+        assignee: { type: string }
+        estimate_loc: { type: integer, format: int64, minimum: 0, nullable: true }
+    StoryUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        acceptance_criteria: { type: string }
+        assignee: { type: string }
+        estimate_loc: { type: integer, format: int64, minimum: 0, nullable: true }
+
+    EpicTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to: { $ref: "#/components/schemas/EpicState" }
+        reason: { type: string }
+        actor: { type: string }
+    StoryTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to: { $ref: "#/components/schemas/StoryState" }
+        reason: { type: string }
+        actor: { type: string }
+
+    HistoryEntry:
+      type: object
+      required: [id, entity_type, entity_id, from_state, to_state, reason, actor, at]
+      properties:
+        id: { type: integer, format: int64 }
+        entity_type: { type: string, enum: [epic, story] }
+        entity_id: { type: integer, format: int64 }
+        from_state: { type: string }
+        to_state: { type: string }
+        reason: { type: string }
+        actor: { type: string }
+        at: { type: string, format: date-time }
+
+    Comment:
+      type: object
+      required: [id, entity_type, entity_id, body, author, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        entity_type: { type: string, enum: [epic, story] }
+        entity_id: { type: integer, format: int64 }
+        body: { type: string }
+        author: { type: string }
+        created_at: { type: string, format: date-time }
+    CommentCreate:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+        author: { type: string }
+
+    Issue:
+      type: object
+      required: [id, project_id, story_id, github_url, github_repo, number, title, kind, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        project_id: { type: integer, format: int64 }
+        story_id: { type: integer, format: int64, nullable: true }
+        github_url: { type: string, example: "https://github.com/acme/widgets/issues/42" }
+        github_repo: { type: string, example: acme/widgets }
+        number: { type: integer, format: int64 }
+        title: { type: string }
+        kind: { type: string }
+        created_at: { type: string, format: date-time }
+    IssueCreate:
+      type: object
+      additionalProperties: false
+      required: [github_url]
+      properties:
+        github_url: { type: string }
+        title: { type: string }
+        kind: { type: string }
+        story_id: { type: integer, format: int64, nullable: true }
+    IssueUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        kind: { type: string }
+        story_id: { type: integer, format: int64, nullable: true }

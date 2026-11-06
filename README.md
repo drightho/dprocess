@@ -18,27 +18,31 @@ Work in progress. Implemented so far:
 - Stories CRUD, state transitions, history and the 400 LOC warning
 - Story dependencies with same-project and cycle checks
 - Tags and comments on epics and stories; GitHub issue references
+- OpenAPI spec (`api/openapi.yaml`, also served at `/api/v1/openapi.yaml`)
+- Web UI scaffold (React + TypeScript + Vite) embedded in the binary; it currently lists and creates projects
 
-Planned: OpenAPI spec and a React + TypeScript web UI. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
+Planned: the full web UI for projects, epics and stories. The detailed state-transition rules are not defined yet; see `CLAUDE.md`.
 
 ## Architecture
 
-- Single Go binary: REST API under `/api/v1`, with the web UI to be embedded and served by the same process.
+- Single Go binary: REST API under `/api/v1`, with the built web UI embedded and served by the same process.
 - In-process database: SQLite (pure-Go `modernc.org/sqlite`, no cgo), persisted on disk in WAL mode.
 - No authentication in v1 (intended for a single user or trusted network).
 
 ## Requirements
 
 - Go 1.22 or newer (developed with Go 1.26)
-- Node.js and npm (only once the web UI exists)
+- Node.js and npm (to build the web UI; not needed for Go-only work)
 
 ## Running
 
 ```sh
-make run            # go run ./cmd/dprocess
-# or
-make build && ./dprocess
+make build && ./dprocess     # builds the web UI, embeds it, builds the server
+# or, without the UI build step:
+make run                     # go run ./cmd/dprocess
 ```
+
+Open http://127.0.0.1:8080/ for the web UI. Without `make web` the server still runs, but `/` answers with a "UI has not been built" message; the API works either way.
 
 | Setting  | Flag     | Environment      | Default           |
 |----------|----------|------------------|-------------------|
@@ -116,15 +120,25 @@ Errors are returned as `application/problem+json` documents (`title`, `status`, 
 ## Development
 
 ```sh
-make test    # go vet ./... && go test ./...
+make test       # Go: go vet + go test
+make web-test   # web: typecheck + vitest
+make check      # everything, plus a check that the generated API types match the spec
+make dev-web    # Vite dev server with hot reload; proxies /api to a server on 127.0.0.1:8080
+make gen-api    # regenerate web/src/api/schema.d.ts after editing api/openapi.yaml
 ```
+
+For UI work, run the server in one terminal (`make run`) and `make dev-web` in another, then open the URL Vite prints.
+
+The API is described by `api/openapi.yaml`. The web client types (`web/src/api/schema.d.ts`) are generated from it and committed; edit the spec, run `make gen-api`, and commit both.
 
 ## Layout
 
 ```
 cmd/dprocess/            main: flags, wiring, graceful shutdown
+api/                     openapi.yaml and the Go package that embeds it
+web/                     React + TypeScript + Vite app (src/), embed.go embeds the built dist/
 internal/store/          SQLite access, embedded migrations (migrations/*.sql)
 internal/service/        business rules (state transitions)
 internal/workflow/       epic and story state machines (provisional rules)
-internal/api/            HTTP handlers, JSON and error helpers
+internal/api/            HTTP handlers, JSON and error helpers, UI/SPA serving
 ```

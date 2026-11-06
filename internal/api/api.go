@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 
 	"github.com/dright/dprocess/internal/store"
@@ -11,6 +12,8 @@ import (
 // Server holds dependencies for HTTP handlers.
 type Server struct {
 	Store *store.Store
+	// UI, if set, is served at / with SPA fallback to index.html.
+	UI fs.FS
 }
 
 // Handler returns the root HTTP handler.
@@ -23,6 +26,11 @@ func (s *Server) Handler() http.Handler {
 	s.registerDependencies(mux)
 	s.registerTagsAndComments(mux)
 	s.registerIssues(mux)
+	mux.HandleFunc("GET /api/v1/openapi.yaml", s.serveSpec)
+	mux.HandleFunc("/api/", apiNotFound)
+	if s.UI != nil {
+		mux.Handle("/", spaHandler(s.UI))
+	}
 	return mux
 }
 
