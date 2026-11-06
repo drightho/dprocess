@@ -40,6 +40,12 @@ export function story(over: Partial<Story> = {}): Story {
   };
 }
 
+export type Project = Schemas["Project"];
+
+export function project(over: Partial<Project> = {}): Project {
+  return { id: 1, name: "Alpha", description: "", created_at: stamp, updated_at: stamp, ...over };
+}
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -51,7 +57,7 @@ export function problem(status: number, title: string, detail: string): Response
   return json({ title, status, detail }, status);
 }
 
-type Route = unknown | Response | (() => unknown | Response);
+type Route = unknown | Response | ((req: Request) => unknown | Response);
 
 /**
  * A fetch stand-in that answers by URL path. A route value may be a plain body,
@@ -65,7 +71,7 @@ export function mockApi(routes: Record<string, Route>) {
     calls.push(path);
     let route = routes[path];
     if (route === undefined) return problem(404, "not found", `no route for ${path}`);
-    if (typeof route === "function") route = (route as () => unknown)();
+    if (typeof route === "function") route = (route as (r: Request) => unknown)(req);
     return route instanceof Response ? route.clone() : json(route);
   });
   vi.stubGlobal("fetch", fetchMock);
