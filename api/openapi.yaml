@@ -478,8 +478,9 @@ paths:
       summary: Move a story to another state
       description: >
         Allowed moves: draft, review, design, implementation, testing,
-        finished in that order; back from implementation to design and from
-        testing to implementation or design; cancelled from any state except
+        pr_review, finished in that order; back from implementation to design,
+        from testing to implementation or design, and from pr_review to design
+        (the pull request review failed); cancelled from any state except
         finished. Finished and cancelled are final. A story can move to review
         only while its epic is review or ready, and to design (and the states
         after it) only while its epic is ready. A story can finish only when
@@ -769,7 +770,7 @@ components:
       enum: [draft, review, ready, finished, cancelled]
     StoryState:
       type: string
-      enum: [draft, review, design, implementation, testing, finished, cancelled]
+      enum: [draft, review, design, implementation, testing, pr_review, finished, cancelled]
 
     Project:
       type: object

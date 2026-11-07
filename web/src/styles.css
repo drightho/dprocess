@@ -13,6 +13,7 @@
   --st-design: #6d28d9;
   --st-implementation: #1d4ed8;
   --st-testing: #0e7490;
+  --st-pr-review: #a21caf;
   --st-finished: #15803d;
   --st-cancelled: #b3261e;
   color-scheme: light dark;
@@ -33,6 +34,7 @@
     --st-design: #c4b5fd;
     --st-implementation: #93b4ff;
     --st-testing: #67e8f9;
+    --st-pr-review: #f0abfc;
     --st-finished: #86efac;
     --st-cancelled: #f2b8b5;
   }
@@ -86,6 +88,7 @@ button { width: fit-content; cursor: pointer; }
 .badge.state[data-state="design"] { --st: var(--st-design); }
 .badge.state[data-state="implementation"] { --st: var(--st-implementation); }
 .badge.state[data-state="testing"] { --st: var(--st-testing); }
+.badge.state[data-state="pr_review"] { --st: var(--st-pr-review); }
 .badge.state[data-state="finished"] { --st: var(--st-finished); }
 .badge.state[data-state="cancelled"] { --st: var(--st-cancelled); }
 

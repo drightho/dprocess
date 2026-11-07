@@ -19,7 +19,7 @@ The story id comes from the user's message (or `$ARGUMENTS`). If they gave a nam
   `/dprocess:init` (it sets the address), and stop; do not start a server of your own to change status, and never edit the database file.
 - **Default is the full cycle**: implement, verify, open a PR, merge it **only if every check passes**,
   finish the story. The user can narrow it: "don't merge" / "stop at the PR" means stop with the PR open and
-  the story in `testing`; "just check" / "dry run" means run the preflight and report, change nothing.
+  the story in `pr_review`; "just check" / "dry run" means run the preflight and report, change nothing.
 - **Never** skip or weaken a check, use `--no-verify` or `--force`, push to `master`, merge with failing
   checks, move a story backwards, or cancel one unless the user asks. The user's instructions win.
 - **Ask, don't guess**, when requirements are unclear or an approval is needed (see step 1).
@@ -43,8 +43,8 @@ $DP epic-status 27                         # is the story's epic now eligible to
 
 ## The workflow rules (enforced by the server; you must plan around them)
 
-Story states: `draft -> review -> design -> implementation -> testing -> finished`. Allowed backward moves:
-`implementation -> design`, `testing -> implementation`, `testing -> design`. `cancelled` from any state except
+Story states: `draft -> review -> design -> implementation -> testing -> pr_review -> finished`. Allowed backward moves:
+`implementation -> design`, `testing -> implementation`, `testing -> design`, `pr_review -> design`. `cancelled` from any state except
 `finished`. `finished` and `cancelled` are final and **read-only** (fields, dependencies, pull request links);
 tags, comments and issue links stay open.
 
@@ -69,7 +69,7 @@ tags, comments and issue links stay open.
      in the PR.
 2. **Understand.** Read `CLAUDE.md` and `README.md` (conventions, architecture, rules), then the code the
    story touches. Check `git status`: it must be clean and on `master`, in sync with `origin`
-   (`git fetch`). If not, stop and ask. If the story is already in `implementation` or `testing`, look for an
+   (`git fetch`). If not, stop and ask. If the story is already in `implementation`, `testing` or `pr_review`, look for an
    existing branch/PR (`git branch`, `gh pr list`) and resume it.
 3. **Start.** Move the story: `$DP move ID implementation --reason "Implementation started on branch story-ID-slug"`,
    then `git switch -c story-ID-slug` (slug: a few lowercase words from the name).
@@ -85,12 +85,12 @@ tags, comments and issue links stay open.
 6. **Docs.** Update `README.md` and `CLAUDE.md` where behavior or conventions changed (and the roadmap line).
 7. **Commit, push, pull request**, following `${CLAUDE_SKILL_DIR}/references/shipping.md` (message and PR templates, attribution
    line). Then record it: `$DP link-pr ID <PR url>` and
-   `$DP move ID testing --reason "Implemented; <n> tests and <m> browser checks pass; pull request opened"`.
+   `$DP move ID testing --reason "Implemented; <n> tests and <m> browser checks pass; pull request opened"`, then `$DP move ID pr_review --reason "Pull request opened for review"`.
 8. **Merge** (unless told not to), following `${CLAUDE_SKILL_DIR}/references/shipping.md`: wait until the PR is `MERGEABLE CLEAN`,
    squash-merge and delete the branch, then verify the merge landed, `master` is in sync, and `make check`
    passes on the merged `master`. If any of that fails, do not mark the story finished; report.
 9. **Finish.** `$DP move ID finished --reason "Delivered in commit <sha> (PR #<n>)"`. If the server refuses
-   (for example an unfinished dependency), report its message and leave the story in `testing`. Then run
+   (for example an unfinished dependency), report its message and leave the story in `pr_review`. Then run
    `$DP epic-status ID`: if the epic can now be finished, **tell the user** and offer; do not finish it yourself,
    because a finished epic is final and accepts no new stories.
 10. **Report** briefly: what was built, the PR link and merge commit, the checks with real numbers, decisions and
@@ -99,4 +99,4 @@ tags, comments and issue links stay open.
 ## If you must stop part-way
 
 Say where you stopped and why. The story stays in the state that is true: `implementation` while work is
-unfinished, `testing` with an open PR. Do not move it forward to look tidy.
+unfinished, `pr_review` with an open PR. Do not move it forward to look tidy.

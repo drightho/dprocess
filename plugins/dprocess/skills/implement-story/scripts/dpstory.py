@@ -104,7 +104,7 @@ def preflight(s, epic):
 
     if epic["state"] in TERMINAL:
         out.append(("WARN", f"the epic is {epic['state']}"))
-    elif state in ("design", "implementation", "testing") and epic["state"] != "ready":
+    elif state in ("design", "implementation", "testing", "pr_review") and epic["state"] != "ready":
         out.append(("WARN", f"the epic is {epic['state']}, not ready: unusual for a story in {state}"))
 
     open_deps = [d for d in s["depends_on"] if d["state"] != "finished"]

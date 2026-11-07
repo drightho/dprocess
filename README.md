@@ -4,7 +4,7 @@ DProcess tracks the activities of a software development process. Software requi
 
 - **Project** - top-level container of requirements.
 - **Epic** - a group of related stories. States: `draft`, `review`, `ready`, `finished`, `cancelled`.
-- **Story** - a deliverable, verifiable piece of software, estimated at no more than 400 lines of code. States: `draft`, `review`, `design`, `implementation`, `testing`, `finished`, `cancelled`. A story may only depend on stories in the same project.
+- **Story** - a deliverable, verifiable piece of software, estimated at no more than 400 lines of code. States: `draft`, `review`, `design`, `implementation`, `testing`, `pr_review`, `finished`, `cancelled`. A story may only depend on stories in the same project.
 
 GitHub issues are tracked as a separate concept: DProcess stores references to issues (URL, repo, number), optionally linked to a story. By default it does not call GitHub; an optional, read-only sync (see below) can cache the status of linked issues and pull requests.
 
@@ -109,9 +109,9 @@ An epic's or story's state cannot be changed with PATCH, only through `transitio
 - Cancelling an epic cancels all of its stories that are not already `finished` or `cancelled`, in the same transaction. Each cancelled story gets a history entry with the reason `epic N cancelled: ...`. Finished stories stay finished.
 - A `finished` or `cancelled` epic accepts no new stories (409).
 
-**Story rules:** a story starts in `draft` and normally moves forward: `draft`, `review`, `design`, `implementation`, `testing`, `finished`. It can also step back from `implementation` to `design`, and from `testing` to `implementation` or `design`. It can be `cancelled` from any state except `finished`; `finished` and `cancelled` are final. Two rules involve other records (both answer 409 with an explanatory message):
+**Story rules:** a story starts in `draft` and normally moves forward: `draft`, `review`, `design`, `implementation`, `testing`, `pr_review`, `finished`. It can also step back from `implementation` to `design`, from `testing` to `implementation` or `design`, and from `pr_review` to `design` (the pull request review failed). It can be `cancelled` from any state except `finished`; `finished` and `cancelled` are final. Two rules involve other records (both answer 409 with an explanatory message):
 
-- A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation` and `testing`.) Cancelling is never gated.
+- A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation`, `testing` and `pr_review`.) Cancelling is never gated.
 - A story can move to `finished` only when every story it depends on is `finished`. A cancelled dependency does not count; remove the dependency or cancel the story instead.
 
 **Finished and cancelled stories are frozen.** They cannot be modified (409):
@@ -201,7 +201,7 @@ Claude then:
 2. moves the story to `implementation` and creates the branch `story-27-<slug>`;
 3. implements it, with tests, following the conventions in `CLAUDE.md`;
 4. verifies it: `make check`, a test for each acceptance criterion, deliberate-breakage checks, and a real run (headless Chrome against a copy of the database for UI work);
-5. commits, opens a pull request, links it to the story and moves the story to `testing`;
+5. commits, opens a pull request, links it to the story and moves the story to `testing`, then to `pr_review`;
 6. merges the pull request only if every check passed, then moves the story to `finished`, citing the merge commit.
 
 It stops and asks before it moves a `draft` or `review` story forward (that is your approval of the plan), when a dependency is not finished yet, or when your working tree is not clean. It does not finish an epic for you, because that is final; it tells you when the epic is eligible. If a check fails it stops, leaves the story in `implementation`, opens no pull request and says what failed.
@@ -209,7 +209,7 @@ It stops and asks before it moves a `draft` or `review` story forward (that is y
 Narrow what it does by saying so:
 
 ```
-implement story 27 but don't merge     # stops with the pull request open, the story in `testing`
+implement story 27 but don't merge     # stops with the pull request open, the story in `pr_review`
 implement story 27, dry run            # only the preflight, nothing is changed
 ```
 

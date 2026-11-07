@@ -36,7 +36,8 @@ func TestStoryTransitions(t *testing.T) {
 		"review":         {"design", "cancelled"},
 		"design":         {"implementation", "cancelled"},
 		"implementation": {"testing", "design", "cancelled"}, // may step back to design
-		"testing":        {"finished", "implementation", "design", "cancelled"},
+		"testing":        {"pr_review", "implementation", "design", "cancelled"},
+		"pr_review":      {"finished", "design", "cancelled"}, // review passed, failed, or story cancelled
 	}
 	allowed := func(from, to string) bool {
 		for _, x := range legal[from] {
@@ -71,8 +72,12 @@ func TestStoryTransitions(t *testing.T) {
 	}
 	// Forward move comes first, cancel last: handy for UIs.
 	got := Story.Targets("testing")
-	if len(got) != 4 || got[0] != "finished" || got[3] != "cancelled" {
+	if len(got) != 4 || got[0] != "pr_review" || got[3] != "cancelled" {
 		t.Errorf("testing targets: %v", got)
+	}
+	got = Story.Targets("pr_review")
+	if len(got) != 3 || got[0] != "finished" || got[1] != "design" || got[2] != "cancelled" {
+		t.Errorf("pr_review targets: %v", got)
 	}
 }
 
