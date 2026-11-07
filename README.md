@@ -159,7 +159,7 @@ More skills will be added to the same plugin.
 Requirements:
 
 - Claude Code 2.1.275 or newer.
-- A running DProcess server (`make run`). The skill talks to `http://127.0.0.1:8085` unless the environment variable `DPROCESS_URL` says otherwise (the server itself listens on `127.0.0.1:8080` by default, so set `DPROCESS_URL` if you did not change that).
+- A running DProcess server (`make run`, which listens on `127.0.0.1:8080` by default). The skill talks to `http://127.0.0.1:8080` unless the environment variable `DPROCESS_URL` says otherwise.
 - Python 3, `git`, `make`, Go and Node.js, as for the project itself, and the GitHub CLI `gh`, signed in, for pull requests.
 - For the browser checks the skill runs on UI stories: `google-chrome`, `sqlite3` and Node.js 22 or newer.
 
