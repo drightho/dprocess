@@ -150,6 +150,7 @@ DProcess ships a [Claude Code](https://code.claude.com) plugin, `dprocess`: a su
 
 | Skill | You say | What it does |
 |-------|---------|--------------|
+| `/dprocess:init` | "set up dprocess" | Asks for your DProcess server's URL, checks that a server answers there and saves it; every other skill of the plugin then uses it. |
 | `/dprocess:implement-story` | "implement story 27" | Reads the story from the server, implements it on a branch with tests, opens a pull request, merges it when every check passes, and moves the story through its workflow on the server. |
 
 More skills will be added to the same plugin.
@@ -159,7 +160,7 @@ More skills will be added to the same plugin.
 Requirements:
 
 - Claude Code 2.1.275 or newer.
-- A running DProcess server (`make run`). The skill talks to `http://127.0.0.1:8085` unless the environment variable `DPROCESS_URL` says otherwise (the server itself listens on `127.0.0.1:8080` by default, so set `DPROCESS_URL` if you did not change that).
+- A running DProcess server (`make run`, which listens on `127.0.0.1:8080` by default). After installing, run `/dprocess:init` once to tell the plugin its URL; it is saved in `~/.config/dprocess/config.json` (or `$XDG_CONFIG_HOME/dprocess/config.json`). Without it the plugin uses `http://127.0.0.1:8080`, and the environment variable `DPROCESS_URL`, if set, overrides both.
 - Python 3, `git`, `make`, Go and Node.js, as for the project itself, and the GitHub CLI `gh`, signed in, for pull requests.
 - For the browser checks the skill runs on UI stories: `google-chrome`, `sqlite3` and Node.js 22 or newer.
 
@@ -212,7 +213,7 @@ implement story 27 but don't merge     # stops with the pull request open, the s
 implement story 27, dry run            # only the preflight, nothing is changed
 ```
 
-Status changes always go to the server named by `DPROCESS_URL`, recorded with the actor `claude` (`DPROCESS_ACTOR` changes that). Claude never starts a server of its own for this and never edits the database file.
+Status changes always go to the server configured with `/dprocess:init` (or `DPROCESS_URL`), recorded with the actor `claude` (`DPROCESS_ACTOR` changes that). Claude never starts a server of its own for this and never edits the database file.
 
 The skill's helper can also be used by hand:
 

@@ -14,9 +14,9 @@ The story id comes from the user's message (or `$ARGUMENTS`). If they gave a nam
 
 ## Ground rules
 
-- **The user's server is the source of truth for status**: `http://127.0.0.1:8085` (override with
-  `DPROCESS_URL`). Use the helper below for every status change. If the server is unreachable, say so and
-  stop; do not start a server of your own to change status, and never edit the database file.
+- **The user's server is the source of truth for status**: the URL saved by `/dprocess:init`
+  (`http://127.0.0.1:8080` if none; `DPROCESS_URL` overrides both). Use the helper below for every status change. If the server is unreachable, say so, suggest
+  `/dprocess:init` (it sets the address), and stop; do not start a server of your own to change status, and never edit the database file.
 - **Default is the full cycle**: implement, verify, open a PR, merge it **only if every check passes**,
   finish the story. The user can narrow it: "don't merge" / "stop at the PR" means stop with the PR open and
   the story in `testing`; "just check" / "dry run" means run the preflight and report, change nothing.
