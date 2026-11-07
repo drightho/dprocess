@@ -8,7 +8,8 @@
   dpstory.py epic-status ID             is the epic of story ID ready to be finished?
   dpstory.py find TEXT                  stories whose name contains TEXT (case-insensitive); "" lists all
 
-The server is http://127.0.0.1:8085 unless DPROCESS_URL is set. Moves are recorded
+The server is the one saved by the init skill (see server_url), unless DPROCESS_URL is set; with
+neither it is http://127.0.0.1:8080. Moves are recorded
 with the actor "claude" unless DPROCESS_ACTOR is set. Only the standard library is used.
 
 The preflight in `show` is advice that mirrors the workflow rules; the server is the
@@ -21,7 +22,26 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("DPROCESS_URL", "http://127.0.0.1:8085").rstrip("/")
+DEFAULT_URL = "http://127.0.0.1:8080"
+
+
+def server_url():
+    """DPROCESS_URL, else the URL saved by `/dprocess:init` (same file as the init skill's dpinit.py), else the default."""
+    if os.environ.get("DPROCESS_URL"):
+        return os.environ["DPROCESS_URL"].rstrip("/")
+    path = os.environ.get("DPROCESS_CONFIG") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "dprocess", "config.json")
+    try:
+        with open(path) as f:
+            saved = str(json.load(f).get("url", "")).strip()
+        if saved:
+            return saved.rstrip("/")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return DEFAULT_URL
+
+
+BASE = server_url()
 API = BASE + "/api/v1"
 ACTOR = os.environ.get("DPROCESS_ACTOR", "claude")
 MAX_LOC = 400
@@ -52,7 +72,7 @@ def call(method, path, body=None):
     except urllib.error.URLError as e:
         sys.exit(
             f"Cannot reach the DProcess server at {BASE} ({e.reason}).\n"
-            "Ask the user to start it (or to give you its address and set DPROCESS_URL). "
+            "Ask the user to start it, or to run /dprocess:init to give you its address. "
             "Do not start a server of your own to update story status: the user's server is the one that counts."
         )
 

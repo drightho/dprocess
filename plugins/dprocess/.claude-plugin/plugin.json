@@ -1,7 +1,7 @@
 {
   "name": "dprocess",
-  "version": "0.1.0",
-  "description": "Skills for working with a DProcess project plan from Claude Code: implement a story end to end and keep its status on the DProcess server in step.",
+  "version": "0.2.0",
+  "description": "Skills for working with a DProcess project plan from Claude Code: init (point the plugin at your server), implement a story end to end and keep its status on the DProcess server in step.",
   "author": {
     "name": "Dright Ho"
   },
