@@ -56,6 +56,7 @@ Then record it on the server (before finishing, because finished stories freeze 
 ```sh
 $DP link-pr <id> <pr-url>
 $DP move <id> testing --reason "Implemented; <n> tests and <m> browser checks pass; pull request opened"
+$DP move <id> pr_review --reason "Pull request opened for review"
 ```
 
 ## Merge

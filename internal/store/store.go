@@ -2,8 +2,10 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -75,9 +77,25 @@ func (s *Store) migrate() error {
 	}
 	sort.Strings(names)
 
+	// Pin one connection and turn foreign key enforcement off while migrations
+	// run: rebuilding a table (the only way SQLite can change a CHECK) would
+	// otherwise cascade-delete or null out rows in tables that reference it.
+	// The pragma is a no-op inside a transaction, so it is set out here and
+	// restored before the connection goes back to the pool.
+	ctx := context.Background()
+	conn, err := s.DB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+
 	for _, name := range names {
 		var n int
-		if err := s.DB.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version = ?`, name).Scan(&n); err != nil {
+		if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version = ?`, name).Scan(&n); err != nil {
 			return err
 		}
 		if n > 0 {
@@ -87,11 +105,16 @@ func (s *Store) migrate() error {
 		if err != nil {
 			return err
 		}
-		tx, err := s.DB.Begin()
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
 		if _, err := tx.Exec(string(body)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %s: %w", name, err)
+		}
+		// Enforcement was off, so make sure the migration left no dangling references.
+		if err := foreignKeyCheck(tx); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("migration %s: %w", name, err)
 		}
@@ -104,4 +127,17 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// foreignKeyCheck fails if any row references a missing parent.
+func foreignKeyCheck(tx *sql.Tx) error {
+	rows, err := tx.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("foreign key check failed")
+	}
+	return rows.Err()
 }

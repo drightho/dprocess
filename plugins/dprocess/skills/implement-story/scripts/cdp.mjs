@@ -39,7 +39,7 @@ export const move = (kind, id, to) => api("POST", `/${kind}/${id}/transition`, {
 export const mkEpic = async (name, project = 1) => (await api("POST", `/projects/${project}/epics`, { name, description: `${name} epic` })).id;
 export const mkStory = async (epic, name, extra = {}) => (await api("POST", `/epics/${epic}/stories`, { name, estimate_loc: 50, ...extra })).id;
 export const readyEpic = async (id) => { await move("epics", id, "review"); await move("epics", id, "ready"); };
-export const finishStory = async (id) => { for (const to of ["review", "design", "implementation", "testing", "finished"]) await move("stories", id, to); };
+export const finishStory = async (id) => { for (const to of ["review", "design", "implementation", "testing", "pr_review", "finished"]) await move("stories", id, to); };
 
 export async function launch(SP, port, profile) {
   const chrome = spawn("google-chrome", ["--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--window-size=1200,1500",

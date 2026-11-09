@@ -12,7 +12,8 @@ const allowed: Record<StoryState, StoryState[]> = {
   review: ["design", "cancelled"],
   design: ["implementation", "cancelled"],
   implementation: ["testing", "design", "cancelled"],
-  testing: ["finished", "implementation", "design", "cancelled"],
+  testing: ["pr_review", "implementation", "design", "cancelled"],
+  pr_review: ["finished", "design", "cancelled"],
   finished: [],
   cancelled: [],
 };
@@ -254,7 +255,8 @@ describe("StoryPage state changes", () => {
       ["draft", ["Move to review", "Cancel story"]],
       ["design", ["Move to implementation", "Cancel story"]],
       ["implementation", ["Move to testing", "Move back to design", "Cancel story"]],
-      ["testing", ["Move to finished", "Move back to implementation", "Move back to design", "Cancel story"]],
+      ["testing", ["Move to pr_review", "Move back to implementation", "Move back to design", "Cancel story"]],
+      ["pr_review", ["Move to finished", "Move back to design", "Cancel story"]],
     ];
     for (const [state, labels] of expected) {
       setup({ story: { state } });
@@ -314,12 +316,12 @@ describe("StoryPage state changes", () => {
 
   it("shows the server's explanation when dependencies are unfinished", async () => {
     const detail = 'transition blocked: a story can finish only when the stories it depends on are finished: #5 "Sessions" (testing)';
-    const { w } = setup({ story: { state: "testing", depends_on: [storyRef({ id: 5, name: "Sessions", state: "testing" })] }, transition: () => problem(409, "conflict", detail) });
+    const { w } = setup({ story: { state: "pr_review", depends_on: [storyRef({ id: 5, name: "Sessions", state: "pr_review" })] }, transition: () => problem(409, "conflict", detail) });
     renderAt();
     await loaded();
     fireEvent.click(button("Move to finished")!);
     expect((await screen.findByRole("alert")).textContent).toContain('#5 "Sessions" (testing)');
-    expect(w.story.state).toBe("testing");
+    expect(w.story.state).toBe("pr_review");
     expect(screen.queryByRole("status")).toBeNull();
   });
 

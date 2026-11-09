@@ -35,7 +35,14 @@ func TestStoryEpicGates(t *testing.T) {
 		// later states imply a ready epic
 		{"design", "implementation", "ready", nil},
 		{"implementation", "testing", "ready", nil},
-		{"testing", "finished", "ready", nil},
+		{"testing", "pr_review", "ready", nil},
+		{"pr_review", "finished", "ready", nil},
+		{"pr_review", "design", "ready", nil},
+		{"pr_review", "design", "review", ErrTransitionBlocked},
+		{"pr_review", "cancelled", "ready", nil},
+		{"pr_review", "implementation", "ready", workflow.ErrIllegalTransition},
+		{"pr_review", "testing", "ready", workflow.ErrIllegalTransition},
+		{"testing", "finished", "ready", workflow.ErrIllegalTransition}, // must pass pr_review
 		{"implementation", "design", "ready", nil},
 		{"testing", "implementation", "ready", nil},
 		{"testing", "design", "ready", nil},
@@ -61,28 +68,33 @@ func TestStoryEpicGates(t *testing.T) {
 
 func TestStoryFinishNeedsFinishedDependencies(t *testing.T) {
 	for _, deps := range [][]string{nil, {"finished"}, {"finished", "finished"}} {
-		if err := StoryTransitionCheck("finished", ctx("testing", "ready", deps...)); err != nil {
+		if err := StoryTransitionCheck("finished", ctx("pr_review", "ready", deps...)); err != nil {
 			t.Errorf("%v should allow finishing: %v", deps, err)
 		}
 	}
 	for _, deps := range [][]string{
 		{"draft"}, {"testing"}, {"cancelled"}, {"finished", "implementation"}, {"cancelled", "finished"},
 	} {
-		err := StoryTransitionCheck("finished", ctx("testing", "ready", deps...))
+		err := StoryTransitionCheck("finished", ctx("pr_review", "ready", deps...))
 		if !errors.Is(err, ErrTransitionBlocked) {
 			t.Errorf("%v should block finishing, got %v", deps, err)
 		}
 	}
 	// The message names only the stories that are not finished.
-	err := StoryTransitionCheck("finished", ctx("testing", "ready", "finished", "testing", "cancelled"))
+	err := StoryTransitionCheck("finished", ctx("pr_review", "ready", "finished", "testing", "cancelled"))
 	if err == nil || strings.Contains(err.Error(), "#10") ||
 		!strings.Contains(err.Error(), `#11 "depb" (testing)`) || !strings.Contains(err.Error(), `#12 "depc" (cancelled)`) {
 		t.Errorf("message: %v", err)
 	}
 	// Dependencies only matter for finishing: other moves ignore them.
-	for _, to := range []string{"implementation", "design", "cancelled"} {
-		if err := StoryTransitionCheck(to, ctx("testing", "ready", "draft")); err != nil {
-			t.Errorf("testing -> %s with an unfinished dependency: %v", to, err)
+	for _, from := range []string{"testing", "pr_review"} {
+		for _, to := range []string{"pr_review", "implementation", "design", "cancelled"} {
+			if workflow.Story.Check(from, to) != nil {
+				continue
+			}
+			if err := StoryTransitionCheck(to, ctx(from, "ready", "draft")); err != nil {
+				t.Errorf("%s -> %s with an unfinished dependency: %v", from, to, err)
+			}
 		}
 	}
 }

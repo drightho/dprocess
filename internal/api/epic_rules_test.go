@@ -10,7 +10,7 @@ import (
 // finishStory walks a story through the story workflow (the epic must be ready).
 func finishStory(t *testing.T, call func(method, path, body string) (int, map[string]any), id string) {
 	t.Helper()
-	for _, to := range []string{"review", "design", "implementation", "testing", "finished"} {
+	for _, to := range []string{"review", "design", "implementation", "testing", "pr_review", "finished"} {
 		if code, m := call("POST", "/stories/"+id+"/transition", `{"to":"`+to+`"}`); code != 200 {
 			t.Fatalf("story %s -> %s: %d %v", id, to, code, m)
 		}
