@@ -4,14 +4,17 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import StoryPage from "./StoryPage";
 import { comment, epic, historyEntry, issue, json, mockApi, problem, pullRequest, story, storyDetail, storyRef, type Comment, type HistoryEntry, type Story, type StoryDetail } from "../test/fixtures";
 
+// Cast until api/openapi.yaml's enum (and the generated schema) lists ready_for_testing; then it is a no-op.
 type StoryState = StoryDetail["state"];
+const RFT = "ready_for_testing" as StoryState;
 
 // What the server's story workflow allows from each state.
-const allowed: Record<StoryState, StoryState[]> = {
+const allowed: Record<string, StoryState[]> = {
   draft: ["review", "cancelled"],
   review: ["design", "cancelled"],
   design: ["implementation", "cancelled"],
-  implementation: ["testing", "design", "cancelled"],
+  implementation: [RFT, "design", "cancelled"],
+  ready_for_testing: ["testing", "implementation", "design", "cancelled"],
   testing: ["pr_review", "implementation", "design", "cancelled"],
   pr_review: ["finished", "design", "cancelled"],
   finished: [],
@@ -254,7 +257,8 @@ describe("StoryPage state changes", () => {
     const expected: [StoryState, string[]][] = [
       ["draft", ["Move to review", "Cancel story"]],
       ["design", ["Move to implementation", "Cancel story"]],
-      ["implementation", ["Move to testing", "Move back to design", "Cancel story"]],
+      ["implementation", ["Move to ready_for_testing", "Move back to design", "Cancel story"]],
+      [RFT, ["Move to testing", "Move back to implementation", "Move back to design", "Cancel story"]],
       ["testing", ["Move to pr_review", "Move back to implementation", "Move back to design", "Cancel story"]],
       ["pr_review", ["Move to finished", "Move back to design", "Cancel story"]],
     ];
@@ -267,6 +271,20 @@ describe("StoryPage state changes", () => {
     }
   });
 
+  it("never offers testing straight from implementation, and shows the state badge", async () => {
+    setup({ story: { state: "implementation" } });
+    const first = renderAt();
+    await loaded();
+    expect(button("Move to testing")).toBeFalsy();
+    first.unmount();
+
+    setup({ story: { state: RFT } });
+    renderAt();
+    await loaded();
+    expect(document.querySelector('.badge.state[data-state="ready_for_testing"]')?.textContent).toContain("ready_for_testing");
+    expect(button("Move to ready_for_testing")).toBeFalsy();
+  });
+
   it("moves the story with a reason and refreshes the page", async () => {
     const { w } = setup({ story: { state: "design" } });
     renderAt();
@@ -277,7 +295,7 @@ describe("StoryPage state changes", () => {
 
     expect((await screen.findByRole("status")).textContent).toBe("Story moved to implementation.");
     expect(w.posts).toEqual([{ to: "implementation", reason: "design agreed" }]);
-    await waitFor(() => expect(panelButtons()).toEqual(["Move to testing", "Move back to design", "Cancel story"]));
+    await waitFor(() => expect(panelButtons()).toEqual(["Move to ready_for_testing", "Move back to design", "Cancel story"]));
     expect((screen.getByLabelText("Reason (optional)") as HTMLInputElement).value).toBe("");
     await waitFor(() => expect(within(screen.getByRole("list", { name: "State history" })).getAllByRole("listitem")).toHaveLength(2));
   });

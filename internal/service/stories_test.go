@@ -34,7 +34,8 @@ func TestStoryEpicGates(t *testing.T) {
 		{"review", "design", "ready", nil},
 		// later states imply a ready epic
 		{"design", "implementation", "ready", nil},
-		{"implementation", "testing", "ready", nil},
+		{"implementation", "ready_for_testing", "ready", nil},
+		{"ready_for_testing", "testing", "ready", nil},
 		{"testing", "pr_review", "ready", nil},
 		{"pr_review", "finished", "ready", nil},
 		{"pr_review", "design", "ready", nil},
@@ -46,6 +47,24 @@ func TestStoryEpicGates(t *testing.T) {
 		{"implementation", "design", "ready", nil},
 		{"testing", "implementation", "ready", nil},
 		{"testing", "design", "ready", nil},
+		// ready_for_testing: every move into it and the backward moves out need a ready epic
+		{"implementation", "ready_for_testing", "draft", ErrTransitionBlocked},
+		{"implementation", "ready_for_testing", "review", ErrTransitionBlocked},
+		{"implementation", "ready_for_testing", "finished", ErrTransitionBlocked},
+		{"implementation", "ready_for_testing", "cancelled", ErrTransitionBlocked},
+		{"ready_for_testing", "testing", "review", ErrTransitionBlocked},
+		{"ready_for_testing", "implementation", "ready", nil},
+		{"ready_for_testing", "implementation", "review", ErrTransitionBlocked},
+		{"ready_for_testing", "design", "ready", nil},
+		{"ready_for_testing", "design", "review", ErrTransitionBlocked},
+		{"ready_for_testing", "cancelled", "ready", nil},
+		{"ready_for_testing", "cancelled", "draft", nil}, // cancelling is never gated
+		{"implementation", "testing", "ready", workflow.ErrIllegalTransition},
+		{"testing", "ready_for_testing", "ready", workflow.ErrIllegalTransition},
+		{"ready_for_testing", "pr_review", "ready", workflow.ErrIllegalTransition},
+		{"ready_for_testing", "finished", "ready", workflow.ErrIllegalTransition},
+		{"ready_for_testing", "review", "ready", workflow.ErrIllegalTransition},
+		{"ready_for_testing", "draft", "ready", workflow.ErrIllegalTransition},
 		{"design", "implementation", "review", ErrTransitionBlocked},
 		// cancelling is never gated by the epic
 		{"draft", "cancelled", "draft", nil},
@@ -87,7 +106,7 @@ func TestStoryFinishNeedsFinishedDependencies(t *testing.T) {
 		t.Errorf("message: %v", err)
 	}
 	// Dependencies only matter for finishing: other moves ignore them.
-	for _, from := range []string{"testing", "pr_review"} {
+	for _, from := range []string{"ready_for_testing", "testing", "pr_review"} {
 		for _, to := range []string{"pr_review", "implementation", "design", "cancelled"} {
 			if workflow.Story.Check(from, to) != nil {
 				continue

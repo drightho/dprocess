@@ -12,6 +12,7 @@
   --st-ready: #0f766e;
   --st-design: #6d28d9;
   --st-implementation: #1d4ed8;
+  --st-ready-for-testing: #0369a1;
   --st-testing: #0e7490;
   --st-pr-review: #a21caf;
   --st-finished: #15803d;
@@ -33,6 +34,7 @@
     --st-ready: #5eead4;
     --st-design: #c4b5fd;
     --st-implementation: #93b4ff;
+    --st-ready-for-testing: #7dd3fc;
     --st-testing: #67e8f9;
     --st-pr-review: #f0abfc;
     --st-finished: #86efac;
@@ -87,6 +89,7 @@ button { width: fit-content; cursor: pointer; }
 .badge.state[data-state="ready"] { --st: var(--st-ready); }
 .badge.state[data-state="design"] { --st: var(--st-design); }
 .badge.state[data-state="implementation"] { --st: var(--st-implementation); }
+.badge.state[data-state="ready_for_testing"] { --st: var(--st-ready-for-testing); }
 .badge.state[data-state="testing"] { --st: var(--st-testing); }
 .badge.state[data-state="pr_review"] { --st: var(--st-pr-review); }
 .badge.state[data-state="finished"] { --st: var(--st-finished); }

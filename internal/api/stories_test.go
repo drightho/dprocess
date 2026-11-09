@@ -90,7 +90,7 @@ func TestStoryLifecycle(t *testing.T) {
 	if at, _ := s["allowed_transitions"].([]any); len(at) != 2 || at[0] != "design" {
 		t.Fatalf("allowed: %v", s["allowed_transitions"])
 	}
-	if resp, _ = do(t, "POST", api+"/stories/1/transition", `{"to":"testing"}`); resp.StatusCode != 409 {
+	if resp, _ = do(t, "POST", api+"/stories/1/transition", `{"to":"ready_for_testing"}`); resp.StatusCode != 409 {
 		t.Fatalf("illegal: %d", resp.StatusCode)
 	}
 	if resp, _ = do(t, "POST", api+"/stories/1/transition", `{"to":"ready"}`); resp.StatusCode != 422 {

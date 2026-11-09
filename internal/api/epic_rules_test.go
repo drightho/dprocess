@@ -10,7 +10,7 @@ import (
 // finishStory walks a story through the story workflow (the epic must be ready).
 func finishStory(t *testing.T, call func(method, path, body string) (int, map[string]any), id string) {
 	t.Helper()
-	for _, to := range []string{"review", "design", "implementation", "testing", "pr_review", "finished"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing", "pr_review", "finished"} {
 		if code, m := call("POST", "/stories/"+id+"/transition", `{"to":"`+to+`"}`); code != 200 {
 			t.Fatalf("story %s -> %s: %d %v", id, to, code, m)
 		}
@@ -85,7 +85,7 @@ func TestEpicCancelCascadesToStories(t *testing.T) {
 	}
 	toState(t, call, "1", "review", 200) // stories can only advance once the epic is
 	toState(t, call, "1", "ready", 200)
-	for _, to := range []string{"review", "design", "implementation", "testing"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing"} {
 		if code, m := call("POST", "/stories/2/transition", `{"to":"`+to+`"}`); code != 200 {
 			t.Fatalf("story 2 -> %s: %d %v", to, code, m)
 		}
@@ -152,4 +152,52 @@ func TestEpicForwardOnly(t *testing.T) {
 	if code, _ := call("POST", "/epics/1/stories", `{"name":"more"}`); code != 201 {
 		t.Fatalf("story in ready epic: %d", code)
 	}
+}
+
+func TestEpicCancelCascadesToReadyForTestingStory(t *testing.T) {
+	srv, st := newTestServer(t)
+	call := func(method, path, body string) (int, map[string]any) {
+		resp, m := do(t, method, srv.URL+"/api/v1"+path, body)
+		return resp.StatusCode, m
+	}
+	st.CreateProject("P", "")
+	st.CreateEpic(1, "E", "")
+	st.CreateStory(1, store.NewStory{Name: "waiting"})
+	toState(t, call, "1", "review", 200)
+	toState(t, call, "1", "ready", 200)
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing"} {
+		if code, m := call("POST", "/stories/1/transition", `{"to":"`+to+`"}`); code != 200 {
+			t.Fatalf("story 1 -> %s: %d %v", to, code, m)
+		}
+	}
+	toState(t, call, "1", "cancelled", 200)
+	if _, m := call("GET", "/stories/1", ""); m["state"] != "cancelled" {
+		t.Fatalf("story: %v", m["state"])
+	}
+	h, _ := st.ListHistory("story", 1)
+	last := h[len(h)-1]
+	if last.FromState != "ready_for_testing" || last.ToState != "cancelled" {
+		t.Errorf("history: %+v", last)
+	}
+}
+
+func TestEpicCannotFinishWithReadyForTestingStory(t *testing.T) {
+	_, call := setupStories(t)
+	toState(t, call, "1", "review", 200)
+	toState(t, call, "1", "ready", 200)
+	finishStory(t, call, "1")
+	for _, id := range []string{"3", "4"} {
+		call("POST", "/stories/"+id+"/transition", `{"to":"cancelled"}`)
+	}
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing"} {
+		if code, m := call("POST", "/stories/2/transition", `{"to":"`+to+`"}`); code != 200 {
+			t.Fatalf("story 2 -> %s: %d %v", to, code, m)
+		}
+	}
+	m := toState(t, call, "1", "finished", 409)
+	if d, _ := m["detail"].(string); !strings.Contains(d, "(ready_for_testing)") {
+		t.Fatalf("detail: %v", m["detail"])
+	}
+	call("POST", "/stories/2/transition", `{"to":"cancelled"}`)
+	toState(t, call, "1", "finished", 200)
 }
