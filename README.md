@@ -153,7 +153,7 @@ DProcess ships a [Claude Code](https://code.claude.com) plugin, `dprocess`: a su
 | `/dprocess:init` | "set up dprocess" | Asks for your DProcess server's URL, checks that a server answers there and saves it; every other skill of the plugin then uses it. |
 | `/dprocess:implement-story` | "implement story 27" | Reads the story from the server, implements it on a branch with tests, opens a pull request, merges it when every check passes, and moves the story through its workflow on the server. |
 | `/dprocess:review-story` | "review story 27" | Only for draft stories. An interviewee subagent (your configuration, high reasoning effort) and a fresh-eyes interviewer question each other until both are clear about the scope and requirements; the interviewee then updates the story on the server and moves it to `review`. |
-| `/dprocess:design-story` | "design story 50" | Only for stories in `review`. On a scratch branch (`scratch/story50-design`) a dev (fresh-eyes), a tester and a requirements engineer acting as the customer's voice agree on the design by writing the tests first; the dev and the requirements engineer review them, and the story then moves to `implementation`. |
+| `/dprocess:design-story` | "design story 50" | Only for stories in `review`. On a scratch branch (`scratch/story50-design`) a dev (fresh-eyes), a tester and a requirements engineer acting as the customer's voice agree on the design by writing the tests first; the dev and the requirements engineer review them, and the story then moves to `design`. |
 
 More skills will be added to the same plugin.
 

@@ -5,8 +5,8 @@
   dpdesign.py update ID [--description D] [--acceptance-criteria A] [--estimate-loc N]
                                          change fields (only the ones given; "@file" reads a file); not for finished/cancelled
   dpdesign.py comment ID TEXT            add a comment to the story (TEXT or @file); open questions and decisions
-  dpdesign.py start-implementation ID [--reason R]
-                                         review -> design -> implementation (the server enforces the rules)
+  dpdesign.py move-to-design ID [--reason R]
+                                         review -> design (the server enforces the rules)
 
 The server is DPROCESS_URL, else the one saved by the init skill, else http://127.0.0.1:8080
 (same precedence as the other dprocess helpers). Moves and comments are recorded with the actor
@@ -108,15 +108,13 @@ def cmd_comment(args):
     print(f"Comment added to story #{args.id}")
 
 
-def cmd_start(args):
+def cmd_move(args):
     s = call("GET", f"/stories/{args.id}")
     if s["state"] != "review":
         sys.exit(f"Story #{args.id} is {s['state']}, not review: this skill only moves a story from review.")
     reason = args.reason or "Design agreed"
-    call("POST", f"/stories/{args.id}/transition", {"to": "design", "actor": ACTOR, "reason": reason})
-    print(f"Story #{args.id} is now design")
-    r = call("POST", f"/stories/{args.id}/transition", {"to": "implementation", "actor": ACTOR, "reason": reason})
-    print(f"Story #{args.id} is now {r.get('state', 'implementation')}")
+    r = call("POST", f"/stories/{args.id}/transition", {"to": "design", "actor": ACTOR, "reason": reason})
+    print(f"Story #{args.id} is now {r.get('state', 'design')}")
 
 
 def main():
@@ -127,7 +125,7 @@ def main():
     a.add_argument("--description"); a.add_argument("--acceptance-criteria", dest="acceptance_criteria")
     a.add_argument("--estimate-loc", dest="estimate_loc", type=int); a.set_defaults(fn=cmd_update)
     a = sub.add_parser("comment"); a.add_argument("id", type=int); a.add_argument("text"); a.set_defaults(fn=cmd_comment)
-    a = sub.add_parser("start-implementation"); a.add_argument("id", type=int); a.add_argument("--reason"); a.set_defaults(fn=cmd_start)
+    a = sub.add_parser("move-to-design"); a.add_argument("id", type=int); a.add_argument("--reason"); a.set_defaults(fn=cmd_move)
     args = p.parse_args()
     args.fn(args)
 
