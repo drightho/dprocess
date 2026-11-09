@@ -19,6 +19,8 @@ func TestParseRepoURLAccepts(t *testing.T) {
 		"https://github.com/owner/repo.git/",
 		"  https://github.com/owner/repo  ",
 		"\thttps://github.com/Owner/Repo.git/\n",
+		"https://GitHub.com/Owner/Repo",
+		"HTTPS://GITHUB.COM/owner/repo.git",
 	} {
 		repo, canonical, err := ParseRepoURL(in)
 		if err != nil || repo != "owner/repo" || canonical != "https://github.com/owner/repo" {

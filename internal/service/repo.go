@@ -12,8 +12,8 @@ var ErrInvalidRepoURL = fmt.Errorf("invalid GitHub repository URL")
 
 var repoPathRe = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$`)
 
-// ParseRepoURL accepts only https://github.com/{owner}/{repo}. The input is
-// trimmed; one trailing slash and one trailing ".git" (case-insensitive, only
+// ParseRepoURL accepts only https://github.com/{owner}/{repo} (the host is
+// case-insensitive, as in DNS). The input is trimmed; one trailing slash and one trailing ".git" (case-insensitive, only
 // when something remains before it) are stripped. It returns the lower-cased
 // "owner/repo" and the canonical URL (https://github.com/owner/repo).
 func ParseRepoURL(raw string) (repo, canonical string, err error) {
@@ -24,7 +24,7 @@ func ParseRepoURL(raw string) (repo, canonical string, err error) {
 	if perr != nil {
 		return bad("not a valid URL")
 	}
-	if u.Scheme != "https" || u.Host != "github.com" || u.User != nil {
+	if u.Scheme != "https" || !strings.EqualFold(u.Host, "github.com") || u.User != nil {
 		return bad("must be an https://github.com URL")
 	}
 	if u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
