@@ -93,7 +93,7 @@ func TestParseRepoURLRefuses(t *testing.T) {
 	}
 }
 
-// ParseIssueURL and ParsePullRequestURL keep their behaviour.
+// ParseIssueURL and ParsePullRequestURL keep their behaviour (apart from accepting a mixed-case host, like ParseRepoURL).
 func TestIssueAndPullURLsUnchanged(t *testing.T) {
 	repo, n, c, err := ParseIssueURL(" https://github.com/Acme/Widgets/issues/7/ ")
 	if err != nil || repo != "acme/widgets" || n != 7 || c != "https://github.com/acme/widgets/issues/7" {

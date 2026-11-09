@@ -57,7 +57,7 @@ func parseGitHubURL(raw, segment string, pathRe *regexp.Regexp, kind error) (rep
 	if perr != nil {
 		return bad("not a valid URL")
 	}
-	if u.Scheme != "https" || u.Host != "github.com" || u.User != nil {
+	if u.Scheme != "https" || !strings.EqualFold(u.Host, "github.com") || u.User != nil {
 		return bad("must be an https://github.com URL")
 	}
 	if u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
