@@ -34,7 +34,13 @@ func TestStoryEpicGates(t *testing.T) {
 		{"review", "design", "ready", nil},
 		// later states imply a ready epic
 		{"design", "implementation", "ready", nil},
-		{"implementation", "testing", "ready", nil},
+		{"implementation", "ready_for_testing", "ready", nil},
+		{"implementation", "ready_for_testing", "review", ErrTransitionBlocked},
+		{"ready_for_testing", "testing", "ready", nil},
+		{"ready_for_testing", "implementation", "ready", nil},
+		{"ready_for_testing", "cancelled", "ready", nil},
+		{"ready_for_testing", "design", "ready", workflow.ErrIllegalTransition},
+		{"implementation", "testing", "ready", workflow.ErrIllegalTransition}, // must pass ready_for_testing
 		{"testing", "pr_review", "ready", nil},
 		{"pr_review", "finished", "ready", nil},
 		{"pr_review", "design", "ready", nil},
@@ -87,8 +93,8 @@ func TestStoryFinishNeedsFinishedDependencies(t *testing.T) {
 		t.Errorf("message: %v", err)
 	}
 	// Dependencies only matter for finishing: other moves ignore them.
-	for _, from := range []string{"testing", "pr_review"} {
-		for _, to := range []string{"pr_review", "implementation", "design", "cancelled"} {
+	for _, from := range []string{"ready_for_testing", "testing", "pr_review"} {
+		for _, to := range []string{"testing", "pr_review", "implementation", "design", "cancelled"} {
 			if workflow.Story.Check(from, to) != nil {
 				continue
 			}

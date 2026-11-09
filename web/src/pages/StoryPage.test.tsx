@@ -11,7 +11,8 @@ const allowed: Record<StoryState, StoryState[]> = {
   draft: ["review", "cancelled"],
   review: ["design", "cancelled"],
   design: ["implementation", "cancelled"],
-  implementation: ["testing", "design", "cancelled"],
+  implementation: ["ready_for_testing", "design", "cancelled"],
+  ready_for_testing: ["testing", "implementation", "cancelled"],
   testing: ["pr_review", "implementation", "design", "cancelled"],
   pr_review: ["finished", "design", "cancelled"],
   finished: [],
@@ -254,7 +255,8 @@ describe("StoryPage state changes", () => {
     const expected: [StoryState, string[]][] = [
       ["draft", ["Move to review", "Cancel story"]],
       ["design", ["Move to implementation", "Cancel story"]],
-      ["implementation", ["Move to testing", "Move back to design", "Cancel story"]],
+      ["implementation", ["Move to ready_for_testing", "Move back to design", "Cancel story"]],
+      ["ready_for_testing", ["Move to testing", "Move back to implementation", "Cancel story"]],
       ["testing", ["Move to pr_review", "Move back to implementation", "Move back to design", "Cancel story"]],
       ["pr_review", ["Move to finished", "Move back to design", "Cancel story"]],
     ];
@@ -277,7 +279,7 @@ describe("StoryPage state changes", () => {
 
     expect((await screen.findByRole("status")).textContent).toBe("Story moved to implementation.");
     expect(w.posts).toEqual([{ to: "implementation", reason: "design agreed" }]);
-    await waitFor(() => expect(panelButtons()).toEqual(["Move to testing", "Move back to design", "Cancel story"]));
+    await waitFor(() => expect(panelButtons()).toEqual(["Move to ready_for_testing", "Move back to design", "Cancel story"]));
     expect((screen.getByLabelText("Reason (optional)") as HTMLInputElement).value).toBe("");
     await waitFor(() => expect(within(screen.getByRole("list", { name: "State history" })).getAllByRole("listitem")).toHaveLength(2));
   });

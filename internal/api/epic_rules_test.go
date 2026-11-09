@@ -10,7 +10,7 @@ import (
 // finishStory walks a story through the story workflow (the epic must be ready).
 func finishStory(t *testing.T, call func(method, path, body string) (int, map[string]any), id string) {
 	t.Helper()
-	for _, to := range []string{"review", "design", "implementation", "testing", "pr_review", "finished"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing", "pr_review", "finished"} {
 		if code, m := call("POST", "/stories/"+id+"/transition", `{"to":"`+to+`"}`); code != 200 {
 			t.Fatalf("story %s -> %s: %d %v", id, to, code, m)
 		}
@@ -85,7 +85,7 @@ func TestEpicCancelCascadesToStories(t *testing.T) {
 	}
 	toState(t, call, "1", "review", 200) // stories can only advance once the epic is
 	toState(t, call, "1", "ready", 200)
-	for _, to := range []string{"review", "design", "implementation", "testing"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing"} {
 		if code, m := call("POST", "/stories/2/transition", `{"to":"`+to+`"}`); code != 200 {
 			t.Fatalf("story 2 -> %s: %d %v", to, code, m)
 		}
