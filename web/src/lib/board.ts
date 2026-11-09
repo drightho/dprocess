@@ -10,7 +10,9 @@ export const STORY_STATES: readonly StoryState[] = [
   "review",
   "design",
   "implementation",
+  "ready_for_testing",
   "testing",
+  "pr_review",
   "finished",
   "cancelled",
 ];

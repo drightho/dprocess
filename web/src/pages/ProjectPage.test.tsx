@@ -77,7 +77,7 @@ describe("ProjectPage overview", () => {
     const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
     expect(regions).toEqual([
       "draft stories", "review stories", "design stories", "implementation stories",
-      "testing stories", "finished stories", "cancelled stories",
+      "ready_for_testing stories", "testing stories", "pr_review stories", "finished stories", "cancelled stories",
     ]);
     expect(within(column("implementation")).getByText("Logout")).toBeTruthy();
     expect(within(column("finished")).getByText("Login")).toBeTruthy();
@@ -405,5 +405,24 @@ describe("ProjectPage new epic", () => {
     expect(screen.queryByRole("form", { name: "New epic" })).toBeNull();
     expect(screen.getByRole("button", { name: "New epic" })).toBeTruthy();
     expect(writes).toHaveLength(0);
+  });
+});
+
+describe("ProjectPage board: ready_for_testing", () => {
+  it("shows a ready_for_testing column between implementation and testing", async () => {
+    mockApi({
+      ...fullRoutes,
+      "/api/v1/projects/1/stories": [
+        // Cast until the generated schema lists the new state; then it is a no-op.
+        story({ id: 5, epic_id: 1, name: "Session audit", state: "ready_for_testing" as ReturnType<typeof story>["state"] }),
+      ],
+    });
+    renderAt("/projects/1");
+    await screen.findByText("Session audit");
+    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
+    expect(regions.indexOf("ready_for_testing stories")).toBe(regions.indexOf("implementation stories") + 1);
+    expect(regions.indexOf("testing stories")).toBe(regions.indexOf("ready_for_testing stories") + 1);
+    expect(within(column("ready_for_testing")).getByText("Session audit")).toBeTruthy();
+    expect(within(column("ready_for_testing")).getByLabelText("1 story")).toBeTruthy();
   });
 });

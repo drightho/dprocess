@@ -107,3 +107,10 @@ describe("epicProgress", () => {
     expect(epicProgress(3, stories)).toEqual({ total: 0, finished: 0, cancelled: 0 });
   });
 });
+
+describe("ready_for_testing", () => {
+  it("sits between implementation and testing", () => {
+    const i = STORY_STATES.indexOf("implementation");
+    expect([...STORY_STATES].slice(i, i + 3)).toEqual(["implementation", "ready_for_testing", "testing"]);
+  });
+});

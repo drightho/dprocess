@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Talk to a DProcess server about stories (helper for the dprocess plugin's implement-story skill).
+"""Talk to a DProcess server about stories (helper for the dprocess plugin's skills).
 
   dpstory.py show ID [--json]           story detail plus a preflight check
   dpstory.py move ID STATE [--reason R] move the story to STATE (the server enforces the rules)
   dpstory.py link-pr ID URL             link a GitHub pull request to the story
+  dpstory.py comment ID TEXT            add a comment to the story (decisions, answers to questions)
   dpstory.py history ID                 the story's state history
   dpstory.py epic-status ID             is the epic of story ID ready to be finished?
   dpstory.py find TEXT                  stories whose name contains TEXT (case-insensitive); "" lists all
 
-The server is http://127.0.0.1:8085 unless DPROCESS_URL is set. Moves are recorded
+The server is the one saved by the init skill (see server_url), unless DPROCESS_URL is set; with
+neither it is http://127.0.0.1:8080. Moves are recorded
 with the actor "claude" unless DPROCESS_ACTOR is set. Only the standard library is used.
 
 The preflight in `show` is advice that mirrors the workflow rules; the server is the
@@ -21,10 +23,28 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("DPROCESS_URL", "http://127.0.0.1:8085").rstrip("/")
+DEFAULT_URL = "http://127.0.0.1:8080"
+
+
+def server_url():
+    """DPROCESS_URL, else the URL saved by `/dprocess:init` (same file as the init skill's dpinit.py), else the default."""
+    if os.environ.get("DPROCESS_URL"):
+        return os.environ["DPROCESS_URL"].rstrip("/")
+    path = os.environ.get("DPROCESS_CONFIG") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "dprocess", "config.json")
+    try:
+        with open(path) as f:
+            saved = str(json.load(f).get("url", "")).strip()
+        if saved:
+            return saved.rstrip("/")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return DEFAULT_URL
+
+
+BASE = server_url()
 API = BASE + "/api/v1"
 ACTOR = os.environ.get("DPROCESS_ACTOR", "claude")
-MAX_LOC = 400
 TERMINAL = ("finished", "cancelled")
 
 
@@ -52,7 +72,7 @@ def call(method, path, body=None):
     except urllib.error.URLError as e:
         sys.exit(
             f"Cannot reach the DProcess server at {BASE} ({e.reason}).\n"
-            "Ask the user to start it (or to give you its address and set DPROCESS_URL). "
+            "Ask the user to start it, or to run /dprocess:init to give you its address. "
             "Do not start a server of your own to update story status: the user's server is the one that counts."
         )
 
@@ -62,45 +82,31 @@ def story_ref(r):
 
 
 def preflight(s, epic):
-    """Lines describing whether the story can be worked on now: (kind, text) with kind OK, WARN or BLOCK."""
+    """Lines describing whether the story can be implemented now: (kind, text) with kind OK, WARN or BLOCK."""
     out = []
     state = s["state"]
     if state in TERMINAL:
         out.append(("BLOCK", f"the story is {state}: finished and cancelled stories are read-only, there is nothing to implement"))
         return out
-
-    if state in ("draft", "review"):
-        out.append(("WARN", f"the story is in {state}: it has to reach design before work starts "
-                            "(review needs the epic in review or ready; design needs the epic ready). "
-                            "Ask the user before moving it forward: that is their plan approval."))
-        if epic["state"] not in ("review", "ready"):
-            out.append(("BLOCK", f"the epic is {epic['state']}: the story cannot even move to review until the epic is review or ready"))
-        elif epic["state"] != "ready":
-            out.append(("BLOCK", f"the epic is {epic['state']}: the story cannot move to design until the epic is ready"))
+    if state == "draft":
+        out.append(("BLOCK", "the story is in draft: it has to be reviewed (/dprocess:review-story) and designed (/dprocess:design-story) first"))
+    elif state == "review":
+        out.append(("BLOCK", "the story is in review: it has to be designed first (/dprocess:design-story writes the tests and moves it to design)"))
     elif state == "design":
-        out.append(("OK", "the story is in design: move it to implementation and start"))
+        out.append(("OK", "the story is in design: it can move to implementation"))
     else:
-        out.append(("OK", f"the story is already in {state}: work has started, resume from there"))
+        out.append(("BLOCK", f"the story is already in {state}: it can only be implemented from design"))
 
-    if epic["state"] in TERMINAL:
-        out.append(("WARN", f"the epic is {epic['state']}"))
-    elif state in ("design", "implementation", "testing") and epic["state"] != "ready":
-        out.append(("WARN", f"the epic is {epic['state']}, not ready: unusual for a story in {state}"))
-
+    if epic["state"] != "ready":
+        out.append(("BLOCK", f"the epic is {epic['state']}, not ready: the story cannot move to implementation"))
     open_deps = [d for d in s["depends_on"] if d["state"] != "finished"]
     if open_deps:
-        cancelled = [d for d in open_deps if d["state"] == "cancelled"]
         out.append(("WARN", "dependencies that are not finished (the story cannot be finished until they are): "
                             + "; ".join(story_ref(d) for d in open_deps)))
-        if cancelled:
-            out.append(("WARN", "cancelled dependencies never count as finished: they must be removed from the story first"))
     else:
         out.append(("OK", "all dependencies are finished" if s["depends_on"] else "the story has no dependencies"))
-
-    if s["estimate_loc"] is not None and s["estimate_loc"] > MAX_LOC:
-        out.append(("WARN", f"the estimate is {s['estimate_loc']} lines (over {MAX_LOC}): consider telling the user it may need splitting"))
     if not s["acceptance_criteria"].strip():
-        out.append(("WARN", "the story has no acceptance criteria: derive them from the description and say so in the PR"))
+        out.append(("WARN", "the story has no acceptance criteria"))
     return out
 
 
@@ -155,6 +161,11 @@ def cmd_link_pr(args):
     print(f"linked {p['github_url']} to story #{args.id}")
 
 
+def cmd_comment(args):
+    call("POST", f"/stories/{args.id}/comments", {"author": ACTOR, "body": args.text})
+    print(f"comment added to story #{args.id}")
+
+
 def cmd_history(args):
     for h in call("GET", f"/stories/{args.id}/history"):
         print(f"{h['at']}  {h['from_state']:>14} -> {h['to_state']:<14} {h['actor'] or '-'}: {h['reason']}")
@@ -197,6 +208,7 @@ def main():
     a = sub.add_parser("show"); a.add_argument("id", type=int); a.add_argument("--json", action="store_true"); a.set_defaults(fn=cmd_show)
     a = sub.add_parser("move"); a.add_argument("id", type=int); a.add_argument("state"); a.add_argument("--reason"); a.set_defaults(fn=cmd_move)
     a = sub.add_parser("link-pr"); a.add_argument("id", type=int); a.add_argument("url"); a.set_defaults(fn=cmd_link_pr)
+    a = sub.add_parser("comment"); a.add_argument("id", type=int); a.add_argument("text"); a.set_defaults(fn=cmd_comment)
     a = sub.add_parser("history"); a.add_argument("id", type=int); a.set_defaults(fn=cmd_history)
     a = sub.add_parser("find"); a.add_argument("text"); a.set_defaults(fn=cmd_find)
     a = sub.add_parser("epic-status"); a.add_argument("id", type=int); a.set_defaults(fn=cmd_epic_status)

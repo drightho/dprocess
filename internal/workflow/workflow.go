@@ -7,10 +7,12 @@
 // stories) live in package service.
 //
 // Story: the transition table is final. A story moves forward
-// (draft -> review -> design -> implementation -> testing -> finished), may
-// step back from implementation to design and from testing to implementation
-// or design, and may be cancelled from any state except finished; finished
-// and cancelled are final. The rules that need data (the epic's state gates
+// (draft -> review -> design -> implementation -> ready_for_testing ->
+// testing -> pr_review -> finished), may step back from implementation to
+// design, from ready_for_testing to implementation or design, from testing to
+// implementation or design, and from pr_review to design (the pull request
+// review failed), and may be cancelled from any state except finished;
+// finished and cancelled are final. The rules that need data (the epic's state gates
 // review/design, finishing requires finished dependencies) live in package
 // service.
 package workflow
@@ -83,12 +85,14 @@ var Epic = newLinear([]string{"draft", "review", "ready", "finished"})
 // Story is the story state machine.
 var Story = &Machine{
 	Initial: "draft",
-	States:  []string{"draft", "review", "design", "implementation", "testing", "finished", "cancelled"},
+	States:  []string{"draft", "review", "design", "implementation", "ready_for_testing", "testing", "pr_review", "finished", "cancelled"},
 	transitions: map[string][]string{
-		"draft":          {"review", "cancelled"},
-		"review":         {"design", "cancelled"},
-		"design":         {"implementation", "cancelled"},
-		"implementation": {"testing", "design", "cancelled"},
-		"testing":        {"finished", "implementation", "design", "cancelled"},
+		"draft":             {"review", "cancelled"},
+		"review":            {"design", "cancelled"},
+		"design":            {"implementation", "cancelled"},
+		"implementation":    {"ready_for_testing", "design", "cancelled"},
+		"ready_for_testing": {"testing", "implementation", "design", "cancelled"},
+		"testing":           {"pr_review", "implementation", "design", "cancelled"},
+		"pr_review":         {"finished", "design", "cancelled"},
 	},
 }

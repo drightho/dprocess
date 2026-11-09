@@ -4,7 +4,7 @@ DProcess tracks the activities of a software development process. Software requi
 
 - **Project** - top-level container of requirements.
 - **Epic** - a group of related stories. States: `draft`, `review`, `ready`, `finished`, `cancelled`.
-- **Story** - a deliverable, verifiable piece of software, estimated at no more than 400 lines of code. States: `draft`, `review`, `design`, `implementation`, `testing`, `finished`, `cancelled`. A story may only depend on stories in the same project.
+- **Story** - a deliverable, verifiable piece of software, estimated at no more than 400 lines of code. States: `draft`, `review`, `design`, `implementation`, `ready_for_testing`, `testing`, `pr_review`, `finished`, `cancelled`. A story may only depend on stories in the same project.
 
 GitHub issues are tracked as a separate concept: DProcess stores references to issues (URL, repo, number), optionally linked to a story. By default it does not call GitHub; an optional, read-only sync (see below) can cache the status of linked issues and pull requests.
 
@@ -109,9 +109,9 @@ An epic's or story's state cannot be changed with PATCH, only through `transitio
 - Cancelling an epic cancels all of its stories that are not already `finished` or `cancelled`, in the same transaction. Each cancelled story gets a history entry with the reason `epic N cancelled: ...`. Finished stories stay finished.
 - A `finished` or `cancelled` epic accepts no new stories (409).
 
-**Story rules:** a story starts in `draft` and normally moves forward: `draft`, `review`, `design`, `implementation`, `testing`, `finished`. It can also step back from `implementation` to `design`, and from `testing` to `implementation` or `design`. It can be `cancelled` from any state except `finished`; `finished` and `cancelled` are final. Two rules involve other records (both answer 409 with an explanatory message):
+**Story rules:** a story starts in `draft` and normally moves forward: `draft`, `review`, `design`, `implementation`, `ready_for_testing`, `testing`, `pr_review`, `finished`. It can also step back from `implementation` to `design`, from `ready_for_testing` to `implementation` or `design`, from `testing` to `implementation` or `design`, and from `pr_review` to `design` (the pull request review failed). It can be `cancelled` from any state except `finished`; `finished` and `cancelled` are final. Two rules involve other records (both answer 409 with an explanatory message):
 
-- A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation` and `testing`.) Cancelling is never gated.
+- A story can move to `review` only while its epic is `review` or `ready`, and to `design` only while its epic is `ready`. (Because an epic can leave `ready` only by finishing or being cancelled, which needs or forces its stories to be final, this also covers `implementation`, `ready_for_testing`, `testing` and `pr_review`.) Cancelling is never gated.
 - A story can move to `finished` only when every story it depends on is `finished`. A cancelled dependency does not count; remove the dependency or cancel the story instead.
 
 **Finished and cancelled stories are frozen.** They cannot be modified (409):
@@ -150,7 +150,10 @@ DProcess ships a [Claude Code](https://code.claude.com) plugin, `dprocess`: a su
 
 | Skill | You say | What it does |
 |-------|---------|--------------|
-| `/dprocess:implement-story` | "implement story 27" | Reads the story from the server, implements it on a branch with tests, opens a pull request, merges it when every check passes, and moves the story through its workflow on the server. |
+| `/dprocess:init` | "set up dprocess" | Asks for your DProcess server's URL, checks that a server answers there and saves it; every other skill of the plugin then uses it. |
+| `/dprocess:implement-story` | "implement story 80" | Only for stories in `design`. Switches to the design branch and renames it to `scratch/story80`, moves the story to `implementation`, and has a dev (who cannot see the tests) implement it while the tester who wrote the tests answers its questions; then the story moves to `ready_for_testing`. |
+| `/dprocess:review-story` | "review story 27" | Only for draft stories. An interviewee subagent (your configuration, high reasoning effort) and a fresh-eyes interviewer question each other until both are clear about the scope and requirements; the interviewee then updates the story on the server and moves it to `review`. |
+| `/dprocess:design-story` | "design story 50" | Only for stories in `review`. On a scratch branch (`scratch/story50-design`) a dev (fresh-eyes), a tester and a requirements engineer acting as the customer's voice agree on the design by writing the tests first; the dev and the requirements engineer review them, and the story then moves to `design`. |
 
 More skills will be added to the same plugin.
 
@@ -159,7 +162,7 @@ More skills will be added to the same plugin.
 Requirements:
 
 - Claude Code 2.1.275 or newer.
-- A running DProcess server (`make run`, which listens on `127.0.0.1:8080` by default). The skill talks to `http://127.0.0.1:8080` unless the environment variable `DPROCESS_URL` says otherwise.
+- A running DProcess server (`make run`, which listens on `127.0.0.1:8080` by default). After installing, run `/dprocess:init` once to tell the plugin its URL; it is saved in `~/.config/dprocess/config.json` (or `$XDG_CONFIG_HOME/dprocess/config.json`). Without it the plugin uses `http://127.0.0.1:8080`, and the environment variable `DPROCESS_URL`, if set, overrides both.
 - Python 3, `git`, `make`, Go and Node.js, as for the project itself, and the GitHub CLI `gh`, signed in, for pull requests.
 - For the browser checks the skill runs on UI stories: `google-chrome`, `sqlite3` and Node.js 22 or newer.
 
@@ -185,43 +188,25 @@ Update with `git pull`, then `claude plugin marketplace update dprocess-marketpl
 
 ### Use
 
-Open Claude Code in your clone of DProcess and just say what you want:
+Open Claude Code in your clone of DProcess and say what you want, one stage at a time:
 
 ```
-implement story 27
-work on story #27
-implement the dependency picker story
-/dprocess:implement-story 27
+review story 80       # draft -> review
+design story 80       # review -> design, tests written on scratch/story80-design
+implement story 80    # design -> implementation -> ready_for_testing, on scratch/story80
 ```
 
-Claude then:
+`implement-story` checks that the story is in `design` and its epic `ready`, switches to `scratch/story80-design` and renames it `scratch/story80`, then runs a dev and a tester. The dev works in a separate worktree from which the test files have been removed, so it implements from the story alone; when it has a question the tester, who wrote the tests, answers it in words (never with test code), and you are asked if neither can settle it. The dev's commits are brought back onto the branch, the project's checks are run and reported (test failures do not stop the hand-over, they are what testing is for), and the story moves to `ready_for_testing`. Nothing is pushed.
 
-1. looks the story up on the server and runs a preflight: its description and acceptance criteria, its dependencies, and whether its epic allows work to start;
-2. moves the story to `implementation` and creates the branch `story-27-<slug>`;
-3. implements it, with tests, following the conventions in `CLAUDE.md`;
-4. verifies it: `make check`, a test for each acceptance criterion, deliberate-breakage checks, and a real run (headless Chrome against a copy of the database for UI work);
-5. commits, opens a pull request, links it to the story and moves the story to `testing`;
-6. merges the pull request only if every check passed, then moves the story to `finished`, citing the merge commit.
+Status changes always go to the server configured with `/dprocess:init` (or `DPROCESS_URL`), recorded with the actor `claude` (`DPROCESS_ACTOR` changes that). Claude never starts a server of its own for this and never edits the database file.
 
-It stops and asks before it moves a `draft` or `review` story forward (that is your approval of the plan), when a dependency is not finished yet, or when your working tree is not clean. It does not finish an epic for you, because that is final; it tells you when the epic is eligible. If a check fails it stops, leaves the story in `implementation`, opens no pull request and says what failed.
-
-Narrow what it does by saying so:
-
-```
-implement story 27 but don't merge     # stops with the pull request open, the story in `testing`
-implement story 27, dry run            # only the preflight, nothing is changed
-```
-
-Status changes always go to the server named by `DPROCESS_URL`, recorded with the actor `claude` (`DPROCESS_ACTOR` changes that). Claude never starts a server of its own for this and never edits the database file.
-
-The skill's helper can also be used by hand:
+The implement-story helper can also be used by hand:
 
 ```sh
 DP="python3 plugins/dprocess/skills/implement-story/scripts/dpstory.py"
 $DP find "landing"                          # look a story up by name
-$DP show 27                                 # detail and preflight
-$DP move 27 implementation --reason "..."   # the server enforces the workflow rules
-$DP epic-status 27                          # can the story's epic be finished now?
+$DP show 80                                 # detail and preflight
+$DP move 80 implementation --reason "..."   # the server enforces the workflow rules
 ```
 
 ## Layout
@@ -234,7 +219,7 @@ internal/store/          SQLite access, embedded migrations (migrations/*.sql)
 internal/service/        business rules (state transitions)
 internal/workflow/       epic and story state machines
 internal/api/            HTTP handlers, JSON and error helpers, UI/SPA serving
-plugins/dprocess/        the Claude Code plugin (skills/implement-story/, scripts, references)
+plugins/dprocess/        the Claude Code plugin (skills/ and their scripts)
 .claude-plugin/          marketplace.json: makes this repository an installable plugin marketplace
 ```
 

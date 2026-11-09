@@ -57,6 +57,7 @@ func TestStoryBackwardMovesAndHistory(t *testing.T) {
 	// implementation -> design is allowed, review is not reachable backwards.
 	storyTo(t, call, "1", "design", 200)
 	storyTo(t, call, "1", "implementation", 200)
+	storyTo(t, call, "1", "ready_for_testing", 200)
 	storyTo(t, call, "1", "testing", 200)
 
 	m := storyTo(t, call, "1", "review", 409) // testing -> review: not allowed
@@ -65,6 +66,7 @@ func TestStoryBackwardMovesAndHistory(t *testing.T) {
 	}
 	// testing -> implementation and testing -> design are both allowed.
 	storyTo(t, call, "1", "implementation", 200)
+	storyTo(t, call, "1", "ready_for_testing", 200)
 	storyTo(t, call, "1", "testing", 200)
 	m = storyTo(t, call, "1", "design", 200)
 	if at, _ := m["allowed_transitions"].([]any); len(at) != 2 || at[0] != "implementation" || at[1] != "cancelled" {
@@ -77,7 +79,7 @@ func TestStoryBackwardMovesAndHistory(t *testing.T) {
 
 	// Every successful move, backward ones included, is in the history in
 	// order; rejected moves are not.
-	want := []string{"review", "design", "implementation", "design", "implementation", "testing", "implementation", "testing", "design"}
+	want := []string{"review", "design", "implementation", "design", "implementation", "ready_for_testing", "testing", "implementation", "ready_for_testing", "testing", "design"}
 	h, err := httpGetJSONArray(api + "/stories/1/history")
 	if err != nil || len(h) != len(want) {
 		t.Fatalf("history: %v %v", h, err)
@@ -100,7 +102,7 @@ func TestStoryFinishNeedsFinishedDependenciesOverAPI(t *testing.T) {
 	// Story 1 depends on story 6 (other epic) and story 2.
 	call("PUT", "/stories/1/dependencies/6", "")
 	call("PUT", "/stories/1/dependencies/2", "")
-	for _, to := range []string{"review", "design", "implementation", "testing"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing", "pr_review"} {
 		storyTo(t, call, "1", to, 200)
 	}
 
@@ -110,8 +112,10 @@ func TestStoryFinishNeedsFinishedDependenciesOverAPI(t *testing.T) {
 		t.Fatalf("detail: %v", d)
 	}
 	// Other moves are not blocked by unfinished dependencies.
-	storyTo(t, call, "1", "implementation", 200)
-	storyTo(t, call, "1", "testing", 200)
+	storyTo(t, call, "1", "design", 200)
+	for _, to := range []string{"implementation", "ready_for_testing", "testing", "pr_review"} {
+		storyTo(t, call, "1", to, 200)
+	}
 
 	finishStory(t, call, "6")
 	m = storyTo(t, call, "1", "finished", 409) // story 2 still open
@@ -134,7 +138,7 @@ func TestStoryFinishNeedsFinishedDependenciesOverAPI(t *testing.T) {
 		t.Fatalf("finished story: %v", m)
 	}
 	// Finished is final: no cancel, no moving back.
-	for _, to := range []string{"cancelled", "testing", "design"} {
+	for _, to := range []string{"cancelled", "pr_review", "testing", "design"} {
 		storyTo(t, call, "1", to, 409)
 	}
 }
@@ -143,9 +147,11 @@ func TestStoryCancelFromEveryNonFinalState(t *testing.T) {
 	_, call := setupStories(t)
 	readyEpic(t, call, "1")
 	call("POST", "/epics/1/stories", `{"name":"e"}`) // story 6; epic 1 now has stories 1-4 and 6
+	call("POST", "/epics/1/stories", `{"name":"f"}`) // story 7
 
-	path := []string{"draft", "review", "design", "implementation", "testing"}
-	ids := []string{"1", "2", "3", "4", "6"}
+	call("POST", "/epics/1/stories", `{"name":"g"}`) // story 8
+	path := []string{"draft", "review", "design", "implementation", "ready_for_testing", "testing", "pr_review"}
+	ids := []string{"1", "2", "3", "4", "6", "7", "8"}
 	for i, state := range path {
 		for _, to := range path[1 : i+1] {
 			storyTo(t, call, ids[i], to, 200)
@@ -168,5 +174,39 @@ func TestNewStoryStartsInDraft(t *testing.T) {
 	}
 	if at, _ := m["allowed_transitions"].([]any); len(at) != 2 || at[0] != "review" || at[1] != "cancelled" {
 		t.Fatalf("allowed: %v", m["allowed_transitions"])
+	}
+}
+
+func TestStoryPRReview(t *testing.T) {
+	api, call := setupStories(t)
+	readyEpic(t, call, "1")
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing"} {
+		storyTo(t, call, "1", to, 200)
+	}
+	// Testing no longer finishes a story directly; pr_review comes first.
+	storyTo(t, call, "1", "finished", 409)
+	m := storyTo(t, call, "1", "pr_review", 200)
+	at, _ := m["allowed_transitions"].([]any)
+	if len(at) != 3 || at[0] != "finished" || at[1] != "design" || at[2] != "cancelled" {
+		t.Fatalf("allowed at pr_review: %v", m["allowed_transitions"])
+	}
+	// Only finished, design and cancelled leave pr_review.
+	storyTo(t, call, "1", "testing", 409)
+	storyTo(t, call, "1", "implementation", 409)
+
+	// Review failed: back to design, then the whole way again.
+	storyTo(t, call, "1", "design", 200)
+	for _, to := range []string{"implementation", "ready_for_testing", "testing", "pr_review", "finished"} {
+		storyTo(t, call, "1", to, 200)
+	}
+	h, err := httpGetJSONArray(api + "/stories/1/history")
+	if err != nil || len(h) != 12 {
+		t.Fatalf("history: %v %v", h, err)
+	}
+	if e := h[5].(map[string]any); e["from_state"] != "testing" || e["to_state"] != "pr_review" {
+		t.Errorf("history[5]: %v", e)
+	}
+	if e := h[6].(map[string]any); e["from_state"] != "pr_review" || e["to_state"] != "design" {
+		t.Errorf("history[6]: %v", e)
 	}
 }

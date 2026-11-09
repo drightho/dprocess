@@ -290,7 +290,7 @@ export interface paths {
         put?: never;
         /**
          * Move a story to another state
-         * @description Allowed moves: draft, review, design, implementation, testing, finished in that order; back from implementation to design and from testing to implementation or design; cancelled from any state except finished. Finished and cancelled are final. A story can move to review only while its epic is review or ready, and to design (and the states after it) only while its epic is ready. A story can finish only when every story it depends on is finished (409 otherwise; a cancelled dependency does not count).
+         * @description Allowed moves: draft, review, design, implementation, ready_for_testing, testing, pr_review, finished in that order; back from implementation to design, from ready_for_testing to implementation or design, from testing to implementation or design, and from pr_review to design (the pull request review failed); cancelled from any state except finished. Finished and cancelled are final. A story can move to review only while its epic is review or ready, and to design (and the states after it) only while its epic is ready. A story can finish only when every story it depends on is finished (409 otherwise; a cancelled dependency does not count).
          */
         post: operations["transitionStory"];
         delete?: never;
@@ -454,7 +454,7 @@ export interface components {
         /** @enum {string} */
         EpicState: "draft" | "review" | "ready" | "finished" | "cancelled";
         /** @enum {string} */
-        StoryState: "draft" | "review" | "design" | "implementation" | "testing" | "finished" | "cancelled";
+        StoryState: "draft" | "review" | "design" | "implementation" | "ready_for_testing" | "testing" | "pr_review" | "finished" | "cancelled";
         Project: {
             /** Format: int64 */
             id: number;
