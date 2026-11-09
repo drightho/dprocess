@@ -346,6 +346,20 @@ func TestPullRequestRepoMismatchWarnings(t *testing.T) {
 	}
 	wantWarn(t, "story detail issue 9", iss[0].(map[string]any), "repo_mismatch")
 	wantWarn(t, "story detail issue 10", iss[1].(map[string]any))
+	// Other endpoints that return the story detail carry the same arrays.
+	for what, resp := range map[string]func() map[string]any{
+		"dependency PUT": func() map[string]any { _, m := call("PUT", "/stories/1/dependencies/2", ""); return m },
+		"tag PUT":        func() map[string]any { _, m := call("PUT", "/stories/1/tags/x", ""); return m },
+	} {
+		m := resp()
+		prs, _ := m["pull_requests"].([]any)
+		iss, _ := m["issues"].([]any)
+		if len(prs) != 3 || len(iss) != 2 {
+			t.Fatalf("%s: pull_requests %v issues %v", what, m["pull_requests"], m["issues"])
+		}
+		wantWarn(t, what+" pr 3", prs[2].(map[string]any), "repo_mismatch")
+		wantWarn(t, what+" issue 10", iss[1].(map[string]any))
+	}
 	// Story without PRs/issues: still arrays.
 	_, s = call("GET", "/stories/3", "")
 	if a, ok := s["pull_requests"].([]any); !ok || len(a) != 0 {
