@@ -8,8 +8,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// An existing database (schema up to migration 0005) keeps its projects and
-// reports no repository link after migration 0006.
+// An existing database (schema up to migration 0006) keeps its projects and
+// reports no repository link after migration 0007.
 func TestProjectRepoMigration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)")
@@ -21,7 +21,7 @@ func TestProjectRepoMigration(t *testing.T) {
 		applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"0001_init.sql", "0002_issue_unique.sql", "0003_story_pull_requests.sql", "0004_github_status.sql", "0005_story_pr_review.sql"} {
+	for _, name := range []string{"0001_init.sql", "0002_issue_unique.sql", "0003_story_pull_requests.sql", "0004_github_status.sql", "0005_story_pr_review.sql", "0006_story_ready_for_testing.sql"} {
 		body, err := migrationFS.ReadFile("migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -65,9 +65,9 @@ func TestProjectRepoMigration(t *testing.T) {
 		t.Errorf("issues kept: %d", n)
 	}
 	var applied int
-	s.DB.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version LIKE '0006%'`).Scan(&applied)
+	s.DB.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version LIKE '0007%'`).Scan(&applied)
 	if applied != 1 {
-		t.Errorf("0006 recorded %d times", applied)
+		t.Errorf("0007 recorded %d times", applied)
 	}
 
 	// New projects work, store round trip, and clearing.
