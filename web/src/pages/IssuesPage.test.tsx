@@ -337,3 +337,31 @@ describe("IssuesPage errors", () => {
     await loaded();
   });
 });
+
+describe("IssuesPage repo_mismatch badge", () => {
+  const MSG = "Different repository than the project's linked repository";
+
+  it("marks only the issue cards whose warnings contain repo_mismatch", async () => {
+    setup({ issues: [{ ...first, warnings: ["repo_mismatch"] }, { ...second, warnings: [] }] });
+    renderAt();
+    await loaded();
+    await screen.findByText(/acme\/widgets#42/);
+
+    const badge = screen.getByLabelText(MSG);
+    expect(badge.textContent).toBe("other repo");
+    expect(badge.getAttribute("title")).toBe(MSG);
+    expect(screen.getAllByLabelText(MSG)).toHaveLength(1);
+    const [newest, oldest] = Array.from(document.querySelectorAll(".cards .card"));
+    expect(oldest.contains(badge)).toBe(true);
+    expect(newest.textContent).not.toContain("other repo");
+  });
+
+  it("shows no badge for empty or unknown warning codes", async () => {
+    setup({ issues: [{ ...first, warnings: [] }, { ...second, warnings: ["estimate_exceeds_400_loc", "brand_new_code"] }] });
+    renderAt();
+    await loaded();
+    await screen.findByText(/acme\/widgets#42/);
+    expect(screen.queryByLabelText(MSG)).toBeNull();
+    expect(screen.queryByText("other repo")).toBeNull();
+  });
+});

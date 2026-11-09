@@ -16,3 +16,7 @@ export function remoteDisplay(r: Remote | undefined, formatTime: (iso: string) =
   const when = r.checked_at ? `checked ${formatTime(r.checked_at)}` : "";
   return { state: r.state, hint: [r.title, when].filter(Boolean).join(" - ") };
 }
+
+// Story 79 stubs (design phase): the implementation replaces these.
+export const repoWarningMessage = (_code: string): string | null => null;
+export const repoLabel = (_url: string): string => "";
