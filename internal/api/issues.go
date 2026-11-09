@@ -64,6 +64,10 @@ func (s *Server) createIssue(w http.ResponseWriter, r *http.Request) {
 		storeError(w, err)
 		return
 	}
+	if err := s.warnIssues(i.ProjectID, i); err != nil {
+		storeError(w, err)
+		return
+	}
 	w.Header().Set("Location", "/api/v1/issues/"+strconv.FormatInt(i.ID, 10))
 	writeJSON(w, http.StatusCreated, i)
 }
@@ -87,6 +91,10 @@ func (s *Server) listIssues(w http.ResponseWriter, r *http.Request) {
 		storeError(w, err)
 		return
 	}
+	if err := s.warnIssues(pid, is...); err != nil {
+		storeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, is)
 }
 
@@ -97,6 +105,10 @@ func (s *Server) getIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	i, err := s.Store.GetIssue(id)
 	if err != nil {
+		storeError(w, err)
+		return
+	}
+	if err := s.warnIssues(i.ProjectID, i); err != nil {
 		storeError(w, err)
 		return
 	}
@@ -119,6 +131,10 @@ func (s *Server) updateIssue(w http.ResponseWriter, r *http.Request) {
 		StoryID:  in.StoryID.Value,
 	})
 	if err != nil {
+		storeError(w, err)
+		return
+	}
+	if err := s.warnIssues(i.ProjectID, i); err != nil {
 		storeError(w, err)
 		return
 	}

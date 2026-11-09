@@ -17,15 +17,17 @@ type Project struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	// GithubRepoURL is the linked repository, "" when none.
+	GithubRepoURL string `json:"github_repo_url"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
-const projectCols = `id, name, description, created_at, updated_at`
+const projectCols = `id, name, description, COALESCE(github_repo_url, ''), created_at, updated_at`
 
 func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
 	var p Project
-	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.GithubRepoURL, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -36,7 +38,13 @@ func scanProject(row interface{ Scan(...any) error }) (*Project, error) {
 
 // CreateProject inserts a new project.
 func (s *Store) CreateProject(name, description string) (*Project, error) {
-	res, err := s.DB.Exec(`INSERT INTO projects(name, description) VALUES (?, ?)`, name, description)
+	return s.CreateProjectWithRepo(name, description, "")
+}
+
+// CreateProjectWithRepo inserts a project with a validated, canonical GitHub
+// repository URL ("" = no link).
+func (s *Store) CreateProjectWithRepo(name, description, githubRepoURL string) (*Project, error) {
+	res, err := s.DB.Exec(`INSERT INTO projects(name, description, github_repo_url) VALUES (?, ?, NULLIF(?, ''))`, name, description, githubRepoURL)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +75,15 @@ func (s *Store) ListProjects() ([]*Project, error) {
 	return out, rows.Err()
 }
 
-// UpdateProject changes the given fields (nil = unchanged).
-func (s *Store) UpdateProject(id int64, name, description *string) (*Project, error) {
+// UpdateProject changes the given fields (nil = unchanged). githubRepoURL must
+// already be canonical; a pointer to "" clears the link.
+func (s *Store) UpdateProject(id int64, name, description, githubRepoURL *string) (*Project, error) {
 	res, err := s.DB.Exec(`UPDATE projects SET
 		name = COALESCE(?, name),
 		description = COALESCE(?, description),
+		github_repo_url = CASE WHEN ? THEN NULLIF(?, '') ELSE github_repo_url END,
 		updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-		WHERE id = ?`, name, description, id)
+		WHERE id = ?`, name, description, githubRepoURL != nil, deref0(githubRepoURL), id)
 	if err != nil {
 		return nil, err
 	}
@@ -102,4 +112,11 @@ func (s *Store) DeleteProject(id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func deref0(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

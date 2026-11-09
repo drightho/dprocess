@@ -774,11 +774,15 @@ components:
 
     Project:
       type: object
-      required: [id, name, description, created_at, updated_at]
+      required: [id, name, description, github_repo_url, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
         description: { type: string }
+        github_repo_url:
+          type: string
+          description: "Linked GitHub repository (canonical https://github.com/{owner}/{repo}), empty when none"
+          example: "https://github.com/acme/widgets"
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     ProjectCreate:
@@ -788,12 +792,18 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         description: { type: string }
+        github_repo_url:
+          type: string
+          description: "Optional https://github.com/{owner}/{repo} (a trailing slash or .git is stripped); empty or whitespace creates the project without a link; anything else is 422"
     ProjectUpdate:
       type: object
       additionalProperties: false
       properties:
         name: { type: string, minLength: 1 }
         description: { type: string }
+        github_repo_url:
+          type: string
+          description: "https://github.com/{owner}/{repo} links the repository; empty or whitespace clears the link; null or absent leaves it unchanged; anything else is 422"
 
     Epic:
       type: object
@@ -813,9 +823,18 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     EpicCreate:
-      $ref: "#/components/schemas/ProjectCreate"
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
     EpicUpdate:
-      $ref: "#/components/schemas/ProjectUpdate"
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
 
     Story:
       type: object
@@ -953,7 +972,7 @@ components:
         checked_at: { type: string, format: date-time, nullable: true }
     Issue:
       type: object
-      required: [id, project_id, story_id, github_url, github_repo, number, title, kind, created_at, remote_status]
+      required: [id, project_id, story_id, github_url, github_repo, number, title, kind, created_at, remote_status, warnings]
       properties:
         id: { type: integer, format: int64 }
         project_id: { type: integer, format: int64 }
@@ -965,9 +984,13 @@ components:
         kind: { type: string }
         created_at: { type: string, format: date-time }
         remote_status: { $ref: "#/components/schemas/RemoteStatus" }
+        warnings:
+          type: array
+          description: "repo_mismatch when the project has a linked repository and this item is in another one"
+          items: { type: string }
     PullRequest:
       type: object
-      required: [id, story_id, github_url, github_repo, number, created_at, remote_status]
+      required: [id, story_id, github_url, github_repo, number, created_at, remote_status, warnings]
       properties:
         id: { type: integer, format: int64 }
         story_id: { type: integer, format: int64 }
@@ -976,6 +999,10 @@ components:
         number: { type: integer, format: int64 }
         created_at: { type: string, format: date-time }
         remote_status: { $ref: "#/components/schemas/RemoteStatus" }
+        warnings:
+          type: array
+          description: "repo_mismatch when the project has a linked repository and this item is in another one"
+          items: { type: string }
     PullRequestCreate:
       type: object
       additionalProperties: false

@@ -18,6 +18,8 @@ type Issue struct {
 	Title      string `json:"title"`
 	Kind       string `json:"kind"`
 	CreatedAt  string `json:"created_at"`
+	// Warnings is filled by the API (e.g. repo_mismatch); never nil.
+	Warnings []string `json:"warnings"`
 	// Remote is the cached GitHub status (state "unknown" unless synced).
 	Remote RemoteStatus `json:"remote_status"`
 }
@@ -25,7 +27,7 @@ type Issue struct {
 const issueCols = `id, project_id, story_id, github_url, github_repo, COALESCE(number, 0), title_cache, kind, created_at`
 
 func scanIssue(row scanner) (*Issue, error) {
-	var i Issue
+	i := Issue{Warnings: []string{}}
 	var story sql.NullInt64
 	if err := row.Scan(&i.ID, &i.ProjectID, &story, &i.GitHubURL, &i.GitHubRepo, &i.Number, &i.Title, &i.Kind, &i.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

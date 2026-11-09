@@ -67,6 +67,7 @@ export function issue(over: Partial<Issue> = {}): Issue {
     kind: "",
     created_at: "2026-01-02T03:04:05.000Z",
     remote_status: { state: "unknown", title: "", checked_at: null },
+    warnings: [],
     ...over,
   };
 }
@@ -80,6 +81,7 @@ export function pullRequest(over: Partial<PullRequest> = {}): PullRequest {
     number: 7,
     created_at: "2026-01-02T03:04:05.000Z",
     remote_status: { state: "unknown", title: "", checked_at: null },
+    warnings: [],
     ...over,
   };
 }
@@ -109,7 +111,7 @@ export function historyEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
 export type Project = Schemas["Project"];
 
 export function project(over: Partial<Project> = {}): Project {
-  return { id: 1, name: "Alpha", description: "", created_at: stamp, updated_at: stamp, ...over };
+  return { id: 1, name: "Alpha", description: "", github_repo_url: "", created_at: stamp, updated_at: stamp, ...over };
 }
 
 export function json(body: unknown, status = 200): Response {
