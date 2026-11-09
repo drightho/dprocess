@@ -36,7 +36,7 @@ func (s *Service) TransitionStory(id int64, to, reason, actor string) (*store.St
 //   - c.From -> to must be allowed by workflow.Story.
 //   - A story can move to review only while its epic is review or ready, and
 //     to design (also back from implementation/testing/pr_review) only while its epic
-//     is ready. The same holds for implementation, testing and pr_review, which a story
+//     is ready. The same holds for implementation, ready_for_testing, testing and pr_review, which a story
 //     can only reach through design.
 //   - A story can finish only when every story it depends on is finished
 //     (a cancelled dependency does not count).
@@ -50,7 +50,7 @@ func StoryTransitionCheck(to string, c store.StoryContext) error {
 			return fmt.Errorf("%w: a story can move to review only while its epic is review or ready (epic is %s)",
 				ErrTransitionBlocked, c.EpicState)
 		}
-	case "design", "implementation", "testing", "pr_review", "finished":
+	case "design", "implementation", "ready_for_testing", "testing", "pr_review", "finished":
 		if c.EpicState != "ready" {
 			return fmt.Errorf("%w: a story can move to %s only while its epic is ready (epic is %s)",
 				ErrTransitionBlocked, to, c.EpicState)

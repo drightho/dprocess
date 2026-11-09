@@ -77,7 +77,7 @@ describe("ProjectPage overview", () => {
     const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
     expect(regions).toEqual([
       "draft stories", "review stories", "design stories", "implementation stories",
-      "testing stories", "pr_review stories", "finished stories", "cancelled stories",
+      "ready_for_testing stories", "testing stories", "pr_review stories", "finished stories", "cancelled stories",
     ]);
     expect(within(column("implementation")).getByText("Logout")).toBeTruthy();
     expect(within(column("finished")).getByText("Login")).toBeTruthy();

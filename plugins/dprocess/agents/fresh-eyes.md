@@ -1,6 +1,6 @@
 ---
 name: fresh-eyes
-description: General-purpose subagent with the same tools and instructions as the parent, except that long-term memory backends (MCP memory servers such as Hindsight) are disabled. Use it when a story step needs an independent view that is not primed by remembered past decisions, for example testing, pr_review or a second opinion on a design.
+description: General-purpose subagent with the same tools and instructions as the parent, except that long-term memory backends (MCP memory servers such as Hindsight) are disabled. Use it when a story step needs an independent view that is not primed by remembered past decisions, for example the dev in implement-story, testing, pr_review or a second opinion on a design.
 disallowedTools: mcp__hindsight
 ---
 

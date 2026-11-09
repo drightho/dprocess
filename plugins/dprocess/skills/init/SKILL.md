@@ -1,6 +1,6 @@
 ---
 name: init
-description: Set up the dprocess plugin by telling it where the DProcess server is. Use when the user says "set up dprocess", "init dprocess", "configure the DProcess server URL", "change the DProcess port", or runs /dprocess:init, and when another dprocess skill reports that it cannot reach the server. Asks for the server URL, verifies a DProcess server answers there, and saves it so the rest of the plugin (implement-story and its helper) uses it.
+description: Set up the dprocess plugin by telling it where the DProcess server is. Use when the user says "set up dprocess", "init dprocess", "configure the DProcess server URL", "change the DProcess port", or runs /dprocess:init, and when another dprocess skill reports that it cannot reach the server. Asks for the server URL, verifies a DProcess server answers there, and saves it so the rest of the plugin (the dprocess skills and their helper) uses it.
 argument-hint: [server URL]
 ---
 

@@ -90,7 +90,7 @@ func TestCancelledDependencyCanBeRemovedFromLiveStory(t *testing.T) {
 
 	// Story 1 depends on story 2, which then gets cancelled: story 1 is stuck.
 	call("PUT", "/stories/1/dependencies/2", "")
-	for _, to := range []string{"review", "design", "implementation", "testing", "pr_review"} {
+	for _, to := range []string{"review", "design", "implementation", "ready_for_testing", "testing", "pr_review"} {
 		storyTo(t, call, "1", to, 200)
 	}
 	storyTo(t, call, "2", "cancelled", 200)

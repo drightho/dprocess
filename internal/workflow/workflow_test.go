@@ -32,12 +32,13 @@ func TestEpicTransitions(t *testing.T) {
 func TestStoryTransitions(t *testing.T) {
 	// The complete set of legal moves; every other pair must be rejected.
 	legal := map[string][]string{
-		"draft":          {"review", "cancelled"},
-		"review":         {"design", "cancelled"},
-		"design":         {"implementation", "cancelled"},
-		"implementation": {"testing", "design", "cancelled"}, // may step back to design
-		"testing":        {"pr_review", "implementation", "design", "cancelled"},
-		"pr_review":      {"finished", "design", "cancelled"}, // review passed, failed, or story cancelled
+		"draft":             {"review", "cancelled"},
+		"review":            {"design", "cancelled"},
+		"design":            {"implementation", "cancelled"},
+		"implementation":    {"ready_for_testing", "design", "cancelled"}, // may step back to design
+		"ready_for_testing": {"testing", "implementation", "cancelled"},
+		"testing":           {"pr_review", "implementation", "design", "cancelled"},
+		"pr_review":         {"finished", "design", "cancelled"}, // review passed, failed, or story cancelled
 	}
 	allowed := func(from, to string) bool {
 		for _, x := range legal[from] {

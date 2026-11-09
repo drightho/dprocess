@@ -87,10 +87,9 @@ the database file. The roles may also read other stories and epics through the R
    **all three** (tester included) say they are fine with the tests. Stop after 5 review rounds that do not
    converge and ask the user.
 8. **Move the story.** Run `$DP move-to-design ID --reason "Design agreed: tests on scratch/storyID-design"`.
-   It goes `review -> design`, recorded in the history. Moving on to `implementation` is the job of `/dprocess:implement-story`. If the server refuses
+   It goes `review -> design`, recorded in the history. Moving on to `implementation` is the job of `/dprocess:implement-story`, which picks up this branch. If the server refuses
    (for example the epic is not `ready`), report its message and leave the story in `review`.
 9. **Report** briefly: the branch name and commit(s), the tests written (files, how many, what they cover), how the dev changed the story, the
    assumptions made and who agreed, the questions the req engineer answered and the ones the user did, the review
-   rounds, and the story's new state. Remind the user that the branch is local and unpushed, and that
-   implementing the story should start from this branch (`/dprocess:implement-story` begins on `master`, so
-   say so when you run it).
+   rounds, and the story's new state. Remind the user that the branch is local and unpushed and that
+   `/dprocess:implement-story` starts from it (it renames the branch to `scratch/storyID`).
