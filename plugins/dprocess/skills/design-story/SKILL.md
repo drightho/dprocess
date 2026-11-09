@@ -1,6 +1,6 @@
 ---
 name: design-story
-description: Design a story that is in review by writing its tests first. Use when the user says "design story 50", "do the design for story 50" or "write the tests for story 50 first" (or /design-story 50). Runs only on stories in the review state. Creates a scratch branch (scratch/story50-design) and runs three subagents, a dev (fresh-eyes, medium effort), a tester (same configuration as you, medium effort) and a requirements engineer who speaks for the customer (same configuration as you, high effort). The tester writes the test code, the dev and the requirements engineer review it, and when all three agree the story moves to implementation.
+description: Design a story that is in review by writing its tests first. Use when the user says "design story 50", "do the design for story 50" or "write the tests for story 50 first" (or /design-story 50). Runs only on stories in the review state. Creates a scratch branch (scratch/story50-design) and runs three subagents, a dev (fresh-eyes, medium effort), a tester (same configuration as you, medium effort) and a requirements engineer who speaks for the customer (same configuration as you, high effort). The tester writes the test code, the dev and the requirements engineer review it, and when all three agree the story moves to design.
 argument-hint: <story-id or name>
 ---
 
@@ -28,7 +28,7 @@ DP="python3 ${CLAUDE_SKILL_DIR}/scripts/dpdesign.py"
 $DP show 50                                   # fields, epic, dependencies
 $DP update 50 --description @d.md --acceptance-criteria @ac.md   # the dev's story update ("@file" reads a file)
 $DP comment 50 "text or @file"                # record a decision or open point on the story
-$DP start-implementation 50 --reason "..."    # review -> design -> implementation (only you call this)
+$DP move-to-design 50 --reason "..."          # review -> design (only you call this)
 ```
 
 The server is `DPROCESS_URL`, else the one saved by `/dprocess:init`, else `http://127.0.0.1:8080`. If it is
@@ -39,7 +39,7 @@ the database file. The roles may also read other stories and epics through the R
 
 1. **Check.** Run `$DP show ID`. If the story is not in `review`, stop and say so (a draft needs
    `/dprocess:review-story` first; later states are already past design). Also check that the epic is `ready`:
-   the story can enter `design`/`implementation` only then. If it is not, tell the user now and ask whether to
+   the story can enter `design` only then. If it is not, tell the user now and ask whether to
    go on anyway (the tests would be written, but the story would stay in `review`); never move the epic yourself.
 2. **Scratch branch.** `git status` must be clean and the branch `master`, in sync with `origin` (`git fetch`);
    otherwise stop and ask. Then `git switch -c scratch/storyID-design` (for story 50: `scratch/story50-design`).
@@ -86,8 +86,8 @@ the database file. The roles may also read other stories and epics through the R
    fix them, and repeat the review. Each of them replies `APPROVED` or `CHANGES:` with a list. This ends only when
    **all three** (tester included) say they are fine with the tests. Stop after 5 review rounds that do not
    converge and ask the user.
-8. **Move the story.** Run `$DP start-implementation ID --reason "Design agreed: tests on scratch/storyID-design"`.
-   It goes `review -> design -> implementation`, both recorded in the history. If the server refuses
+8. **Move the story.** Run `$DP move-to-design ID --reason "Design agreed: tests on scratch/storyID-design"`.
+   It goes `review -> design`, recorded in the history. Moving on to `implementation` is the job of `/dprocess:implement-story`. If the server refuses
    (for example the epic is not `ready`), report its message and leave the story in `review`.
 9. **Report** briefly: the branch name and commit(s), the tests written (files, how many, what they cover), how the dev changed the story, the
    assumptions made and who agreed, the questions the req engineer answered and the ones the user did, the review
