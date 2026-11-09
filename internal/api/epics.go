@@ -69,7 +69,7 @@ func (s *Server) createEpic(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in projectInput
+	var in epicInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -108,7 +108,7 @@ func (s *Server) updateEpic(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in projectInput
+	var in epicInput
 	if !decode(w, r, &in) {
 		return
 	}

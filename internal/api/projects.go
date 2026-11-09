@@ -71,6 +71,12 @@ type projectInput struct {
 	GithubRepoURL *string `json:"github_repo_url"`
 }
 
+// epicInput is the body of epic create and update (no repository link).
+type epicInput struct {
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+}
+
 // canonicalRepo validates a non-blank repository URL; blank means "no link".
 func canonicalRepo(p *string) (*string, error) {
 	if p == nil {
