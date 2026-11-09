@@ -479,7 +479,7 @@ paths:
       description: >
         Allowed moves: draft, review, design, implementation,
         ready_for_testing, testing, pr_review, finished in that order; back from
-        implementation to design, from ready_for_testing to implementation,
+        implementation to design, from ready_for_testing to implementation or design,
         from testing to implementation or design, and from pr_review to design
         (the pull request review failed); cancelled from any state except
         finished. Finished and cancelled are final. A story can move to review
