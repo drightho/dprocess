@@ -33,7 +33,13 @@ func (s *Server) detailStory(st *store.Story) (storyDetail, error) {
 	if d.Issues, err = s.Store.ListIssues(st.ProjectID, st.ID); err != nil {
 		return d, err
 	}
-	d.PullRequests, err = s.Store.ListPullRequests(st.ID)
+	if err = s.warnIssues(st.ProjectID, d.Issues...); err != nil {
+		return d, err
+	}
+	if d.PullRequests, err = s.Store.ListPullRequests(st.ID); err != nil {
+		return d, err
+	}
+	err = s.warnPullRequests(st.ID, d.PullRequests...)
 	return d, err
 }
 

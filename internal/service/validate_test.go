@@ -13,6 +13,7 @@ func TestParseIssueURL(t *testing.T) {
 		{"https://github.com/acme/widgets/issues/42", "acme/widgets", "https://github.com/acme/widgets/issues/42", 42},
 		{"  https://github.com/Acme/Widgets/issues/7/ ", "acme/widgets", "https://github.com/acme/widgets/issues/7", 7},
 		{"https://github.com/a-b/c.d_e/issues/1", "a-b/c.d_e", "https://github.com/a-b/c.d_e/issues/1", 1},
+		{"https://GitHub.com/Acme/Widgets/issues/5", "acme/widgets", "https://github.com/acme/widgets/issues/5", 5}, // the host is case-insensitive
 	}
 	for _, c := range good {
 		repo, n, canon, err := ParseIssueURL(c.in)
@@ -78,6 +79,7 @@ func TestParsePullRequestURL(t *testing.T) {
 		{"https://github.com/acme/widgets/pull/42", "acme/widgets", "https://github.com/acme/widgets/pull/42", 42},
 		{"  https://github.com/Acme/Widgets/pull/7/ ", "acme/widgets", "https://github.com/acme/widgets/pull/7", 7},
 		{"https://github.com/a-b/c.d_e/pull/1", "a-b/c.d_e", "https://github.com/a-b/c.d_e/pull/1", 1},
+		{"HTTPS://GITHUB.COM/Acme/Widgets/pull/5", "acme/widgets", "https://github.com/acme/widgets/pull/5", 5}, // the host is case-insensitive
 	}
 	for _, c := range good {
 		repo, n, canon, err := ParsePullRequestURL(c.in)

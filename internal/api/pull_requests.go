@@ -23,6 +23,10 @@ func (s *Server) listPullRequests(w http.ResponseWriter, r *http.Request) {
 		storeError(w, err)
 		return
 	}
+	if err := s.warnPullRequests(id, prs...); err != nil {
+		storeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, prs)
 }
 
@@ -46,6 +50,10 @@ func (s *Server) addPullRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	pr, err := s.Store.AddPullRequest(id, canonical, repo, number)
 	if err != nil {
+		storeError(w, err)
+		return
+	}
+	if err := s.warnPullRequests(id, pr); err != nil {
 		storeError(w, err)
 		return
 	}

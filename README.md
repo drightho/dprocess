@@ -47,6 +47,7 @@ curl -s -X POST  localhost:8080/api/v1/projects -d '{"name":"Demo","description"
 curl -s          localhost:8080/api/v1/projects
 curl -s          localhost:8080/api/v1/projects/1
 curl -s -X PATCH localhost:8080/api/v1/projects/1 -d '{"name":"Renamed"}'
+curl -s -X PATCH localhost:8080/api/v1/projects/1 -d '{"github_repo_url":"https://github.com/acme/widgets"}'   # link a repo; "" clears it
 curl -s -X DELETE localhost:8080/api/v1/projects/1
 
 # epics
@@ -92,6 +93,8 @@ curl -s -X DELETE localhost:8080/api/v1/issues/1
 ```
 
 Tags match `^[a-z0-9][a-z0-9._:-]{0,49}$` after trimming and lower-casing (422 otherwise). Comments cannot be edited or deleted.
+
+A project can optionally be linked to a GitHub repository with `github_repo_url` (on `POST /projects` and `PATCH /projects/{id}`; every project response carries it, `""` when unset). Only `https://github.com/{owner}/{repo}` is accepted (the host `github.com` is matched case-insensitively here and in issue and pull request links; surrounding whitespace, one trailing slash and one trailing `.git` are stripped; stored canonical and lower-case; anything else, such as another host, `http`, a query string or an extra path like `/tree/main`, is 422 and changes nothing). PATCH with `""` or whitespace clears the link, `null` or an absent field leaves it unchanged. Several projects may link the same repository. Issues and pull requests carry a `warnings` array: it contains `repo_mismatch` when the project has a linked repository and the item belongs to another one. This is only a warning (creating or updating the item still succeeds), it is computed on every read, and no GitHub API call is made for it.
 
 Pull request links accept only URLs of the form `https://github.com/{owner}/{repo}/pull/{number}` (same strict rules as issues: optional trailing slash, no query string, fragment or extra path such as `/files`; issue URLs are rejected, 422). The URL is stored in canonical lower-case form; linking the same pull request twice to a story returns 409. The list is part of the story record, so it is frozen with it: adding or removing a link on a `finished` or `cancelled` story returns 409. Deleting a story deletes its links.
 

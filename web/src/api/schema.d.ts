@@ -460,6 +460,11 @@ export interface components {
             id: number;
             name: string;
             description: string;
+            /**
+             * @description Linked GitHub repository (canonical https://github.com/{owner}/{repo}), empty when none
+             * @example https://github.com/acme/widgets
+             */
+            github_repo_url: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -468,10 +473,14 @@ export interface components {
         ProjectCreate: {
             name: string;
             description?: string;
+            /** @description Optional https://github.com/{owner}/{repo} (a trailing slash or .git is stripped); empty or whitespace creates the project without a link; anything else is 422 */
+            github_repo_url?: string;
         };
         ProjectUpdate: {
             name?: string;
             description?: string;
+            /** @description https://github.com/{owner}/{repo} links the repository; empty or whitespace clears the link; null or absent leaves it unchanged; anything else is 422 */
+            github_repo_url?: string;
         };
         Epic: {
             /** Format: int64 */
@@ -488,8 +497,14 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        EpicCreate: components["schemas"]["ProjectCreate"];
-        EpicUpdate: components["schemas"]["ProjectUpdate"];
+        EpicCreate: {
+            name: string;
+            description?: string;
+        };
+        EpicUpdate: {
+            name?: string;
+            description?: string;
+        };
         Story: {
             /** Format: int64 */
             id: number;
@@ -616,6 +631,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             remote_status: components["schemas"]["RemoteStatus"];
+            /** @description repo_mismatch when the project has a linked repository and this item is in another one */
+            warnings: string[];
         };
         PullRequest: {
             /** Format: int64 */
@@ -631,6 +648,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             remote_status: components["schemas"]["RemoteStatus"];
+            /** @description repo_mismatch when the project has a linked repository and this item is in another one */
+            warnings: string[];
         };
         PullRequestCreate: {
             github_url: string;

@@ -15,6 +15,8 @@ type PullRequest struct {
 	GitHubRepo string `json:"github_repo"`
 	Number     int64  `json:"number"`
 	CreatedAt  string `json:"created_at"`
+	// Warnings is filled by the API (e.g. repo_mismatch); never nil.
+	Warnings []string `json:"warnings"`
 	// Remote is the cached GitHub status (state "unknown" unless synced).
 	Remote RemoteStatus `json:"remote_status"`
 }
@@ -22,7 +24,7 @@ type PullRequest struct {
 const prCols = `id, story_id, github_url, github_repo, number, created_at`
 
 func scanPR(row scanner) (*PullRequest, error) {
-	var p PullRequest
+	p := PullRequest{Warnings: []string{}}
 	if err := row.Scan(&p.ID, &p.StoryID, &p.GitHubURL, &p.GitHubRepo, &p.Number, &p.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

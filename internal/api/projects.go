@@ -40,7 +40,7 @@ func storeError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "conflict", err.Error())
 	case errors.Is(err, workflow.ErrUnknownState), errors.Is(err, store.ErrSelfDependency),
 		errors.Is(err, store.ErrCrossProject), errors.Is(err, store.ErrBadReference),
-		errors.Is(err, service.ErrInvalidTag), errors.Is(err, service.ErrInvalidIssueURL),
+		errors.Is(err, service.ErrInvalidTag), errors.Is(err, service.ErrInvalidIssueURL), errors.Is(err, service.ErrInvalidRepoURL),
 		errors.Is(err, service.ErrInvalidPullRequestURL):
 		writeError(w, http.StatusUnprocessableEntity, "validation failed", err.Error())
 	default:
@@ -66,8 +66,31 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 type projectInput struct {
+	Name          *string `json:"name"`
+	Description   *string `json:"description"`
+	GithubRepoURL *string `json:"github_repo_url"`
+}
+
+// epicInput is the body of epic create and update (no repository link).
+type epicInput struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
+}
+
+// canonicalRepo validates a non-blank repository URL; blank means "no link".
+func canonicalRepo(p *string) (*string, error) {
+	if p == nil {
+		return nil, nil
+	}
+	if strings.TrimSpace(*p) == "" {
+		empty := ""
+		return &empty, nil
+	}
+	_, canonical, err := service.ParseRepoURL(*p)
+	if err != nil {
+		return nil, err
+	}
+	return &canonical, nil
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +106,12 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	if in.Description != nil {
 		desc = *in.Description
 	}
-	p, err := s.Store.CreateProject(strings.TrimSpace(*in.Name), desc)
+	repo, err := canonicalRepo(in.GithubRepoURL)
+	if err != nil {
+		storeError(w, err)
+		return
+	}
+	p, err := s.Store.CreateProjectWithRepo(strings.TrimSpace(*in.Name), desc, deref(repo))
 	if err != nil {
 		storeError(w, err)
 		return
@@ -124,7 +152,12 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		in.Name = &trimmed
 	}
-	p, err := s.Store.UpdateProject(id, in.Name, in.Description)
+	repo, err := canonicalRepo(in.GithubRepoURL)
+	if err != nil {
+		storeError(w, err)
+		return
+	}
+	p, err := s.Store.UpdateProject(id, in.Name, in.Description, repo)
 	if err != nil {
 		storeError(w, err)
 		return
