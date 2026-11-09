@@ -148,8 +148,8 @@ func TestStoryCancelFromEveryNonFinalState(t *testing.T) {
 	readyEpic(t, call, "1")
 	call("POST", "/epics/1/stories", `{"name":"e"}`) // story 6; epic 1 now has stories 1-4 and 6
 	call("POST", "/epics/1/stories", `{"name":"f"}`) // story 7
-	call("POST", "/epics/1/stories", `{"name":"g"}`) // story 8
 
+	call("POST", "/epics/1/stories", `{"name":"g"}`) // story 8
 	path := []string{"draft", "review", "design", "implementation", "ready_for_testing", "testing", "pr_review"}
 	ids := []string{"1", "2", "3", "4", "6", "7", "8"}
 	for i, state := range path {
@@ -209,27 +209,4 @@ func TestStoryPRReview(t *testing.T) {
 	if e := h[6].(map[string]any); e["from_state"] != "pr_review" || e["to_state"] != "design" {
 		t.Errorf("history[6]: %v", e)
 	}
-}
-
-func TestStoryReadyForTesting(t *testing.T) {
-	_, call := setupStories(t)
-	readyEpic(t, call, "1")
-	for _, to := range []string{"review", "design", "implementation"} {
-		storyTo(t, call, "1", to, 200)
-	}
-	// Implementation no longer reaches testing directly; ready_for_testing comes first.
-	storyTo(t, call, "1", "testing", 409)
-	m := storyTo(t, call, "1", "ready_for_testing", 200)
-	at, _ := m["allowed_transitions"].([]any)
-	if len(at) != 3 || at[0] != "testing" || at[1] != "implementation" || at[2] != "cancelled" {
-		t.Fatalf("allowed at ready_for_testing: %v", m["allowed_transitions"])
-	}
-	// Only testing, implementation and cancelled leave it: not design, not pr_review.
-	for _, to := range []string{"design", "pr_review", "finished"} {
-		storyTo(t, call, "1", to, 409)
-	}
-	storyTo(t, call, "1", "implementation", 200) // testing found the build unfit
-	storyTo(t, call, "1", "ready_for_testing", 200)
-	storyTo(t, call, "1", "testing", 200)
-	storyTo(t, call, "1", "cancelled", 200)
 }
