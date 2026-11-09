@@ -78,16 +78,25 @@ the database file. Never cancel the story or skip a state; the only moves this s
      convergence, or when one holds a `REJECT:` after the other has seen its reasons. A question only the user can
      answer (an unclear requirement) goes to the user (AskUserQuestion) and the answer back to both; if the user cannot
      settle it, treat it as not agreed.
-6. **Both approve: merge.** Re-check `gh pr view <url> --json state,mergeable,statusCheckRollup`. If checks fail or the PR is
-   not mergeable, that is a finding: go to step 7 (conflicts to resolve are the implementer's job, not this skill's).
-   Otherwise merge it, using the repository's style (the history shows squash merges):
-   `gh pr merge <url> --squash`. Do not use `--admin` and do not bypass protections. If the merge is refused, report the
-   message, leave the story in `pr_review` and stop. After a successful merge:
-   - `$DP comment ID "<text>"`: the PR URL, the merge commit, and the review result (rounds, questions raised, how they were settled).
-   - `$DP move ID finished --reason "Pull request <url> reviewed and merged"`. If the server refuses (for example a
-     dependency is not finished), report its message, leave the story in `pr_review` and tell the user the PR is
-     already merged.
-   - Switch back to the branch you came from (usually `master`) and, if the tree is clean, `git pull --ff-only`.
+6. **Both approve: approve and merge.** In this order:
+   1. **Re-check** `gh pr view <url> --json state,mergeable,statusCheckRollup`. If checks fail or the PR is not
+      mergeable, that is a finding: go to step 7 without approving (conflicts to resolve are the implementer's job,
+      not this skill's).
+   2. **Approve the PR on GitHub** with a summary built from both sides: what the interviewee (the reviewee) confirmed it
+      checked and the evidence it gave, what the interviewer (the reviewer) verified, and the questions raised and how
+      they were settled. Write it to a file and run `gh pr review <url> --approve --body-file <file>`. If GitHub refuses
+      the approval (for example you cannot approve your own PR), post the same text with
+      `gh pr comment <url> --body-file <file>` and say so in the report. If even that fails, report the message and
+      stop with the story in `pr_review`.
+   3. **Merge** it, using the repository's style (the history shows squash merges): `gh pr merge <url> --squash`. Do
+      not use `--admin` and do not bypass protections. If the merge is refused, report the message, leave the story in
+      `pr_review` and stop.
+   4. **After a successful merge:**
+      - `$DP comment ID "<text>"`: the PR URL, the merge commit, and the review result (rounds, questions raised, how they were settled).
+      - `$DP move ID finished --reason "Pull request <url> reviewed and merged"`. If the server refuses (for example a
+        dependency is not finished), report its message, leave the story in `pr_review` and tell the user the PR is
+        already merged.
+      - Switch back to the branch you came from (usually `master`) and, if the tree is clean, `git pull --ff-only`.
 7. **No agreement: send it back.** Do **not** merge. Tell the interviewee to document the findings:
    - Post them on the pull request with `gh pr review <url> --request-changes --body-file <file>` (or `gh pr comment`
      when `--request-changes` is not allowed, for example on your own PR). The text lists, per finding: the story
