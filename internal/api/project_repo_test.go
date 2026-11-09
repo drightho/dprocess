@@ -162,6 +162,27 @@ func TestProjectRepoLinkRefused(t *testing.T) {
 	}
 }
 
+// Body validation runs before the store lookup, as everywhere in this API (an empty epic or story
+// name, an invalid issue URL): a malformed body is 422 even when the project does not exist, and a
+// well-formed one on an unknown project is 404. Pinned so the order does not change by accident.
+func TestProjectRepoPatchUnknownProject(t *testing.T) {
+	srv, _ := newTestServer(t)
+	base := srv.URL + "/api/v1/projects"
+	resp, m := do(t, "PATCH", base+"/99", `{"github_repo_url":"http://github.com/o/r"}`)
+	if resp.StatusCode != 422 || !strings.Contains(m["detail"].(string), repoMsg) {
+		t.Errorf("invalid url, unknown project: %d %v", resp.StatusCode, m)
+	}
+	if resp, _ := do(t, "PATCH", base+"/99", `{"github_repo_url":"https://github.com/o/r"}`); resp.StatusCode != 404 {
+		t.Errorf("valid url, unknown project: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, "PATCH", base+"/99", `{"github_repo_url":""}`); resp.StatusCode != 404 {
+		t.Errorf("clear, unknown project: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, "PATCH", base+"/99", `{"name":"  "}`); resp.StatusCode != 422 {
+		t.Errorf("blank name, unknown project (existing rule): %d", resp.StatusCode)
+	}
+}
+
 func TestProjectsMayShareRepo(t *testing.T) {
 	srv, _ := newTestServer(t)
 	base := srv.URL + "/api/v1/projects"
