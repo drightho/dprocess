@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import ProjectPage from "./ProjectPage";
 import { RECENT_KEY, readRecent } from "../lib/recent";
-import { useQuery } from "@tanstack/react-query";
 import { epic, json, mockApi, problem, story } from "../test/fixtures";
 
 const project = {
@@ -435,7 +434,7 @@ describe("ProjectPage GitHub repository form", () => {
 
   /** Cached queries the save must refresh: they are kept active by this probe. */
   function CacheProbe() {
-    const get = (key: unknown[], path: string) => useQuery({ queryKey: key, queryFn: () => fetch(path).then((r) => r.json()) });
+    const get = (key: unknown[], path: string) => useQuery({ queryKey: key, queryFn: () => fetch(new Request(new URL(path, window.location.origin))).then((r) => r.json()) });
     get(["project", 1, "issues"], "/api/v1/projects/1/issues");
     get(["story", 5], "/api/v1/stories/5");
     get(["projects"], "/api/v1/projects");
@@ -452,7 +451,10 @@ describe("ProjectPage GitHub repository form", () => {
           const body = (await req.clone().json()) as Record<string, unknown>;
           state.bodies.push(body);
           const custom = await patch?.(body);
-          if (custom) return custom;
+          if (custom) {
+            if (custom.status < 400) state.saved = String(((await custom.clone().json()) as { github_repo_url?: string }).github_repo_url ?? "");
+            return custom;
+          }
           state.saved = String(body.github_repo_url ?? "").trim();
         }
         return { ...project, github_repo_url: state.saved };
