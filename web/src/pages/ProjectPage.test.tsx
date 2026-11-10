@@ -51,6 +51,7 @@ function renderAt(url: string) {
 }
 
 const column = (state: string) => screen.getByRole("region", { name: `${state} stories` });
+const regionLabels = () => screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
 const location = () => screen.getByTestId("location").textContent;
 /** Names of the story cards currently on the board, in column order. */
 const cardNames = () =>
@@ -74,18 +75,15 @@ describe("ProjectPage overview", () => {
     expect(billing.textContent).toContain("draft");
     expect(billing.textContent).toContain("0 of 2 stories finished, 1 cancelled");
 
-    // One column per state, in workflow order, each with its count.
-    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
-    expect(regions).toEqual([
-      "draft stories", "review stories", "design stories", "implementation stories",
-      "ready_for_testing stories", "testing stories", "pr_review stories", "finished stories", "cancelled stories",
+    // Only states that have stories get a column, in workflow order, each with its count.
+    expect(regionLabels()).toEqual([
+      "draft stories", "implementation stories", "finished stories", "cancelled stories",
     ]);
     expect(within(column("implementation")).getByText("Logout")).toBeTruthy();
     expect(within(column("finished")).getByText("Login")).toBeTruthy();
     expect(within(column("cancelled")).getByText("Old idea")).toBeTruthy();
-    expect(within(column("review")).getByText("None")).toBeTruthy();
     expect(within(column("implementation")).getByLabelText("1 story")).toBeTruthy();
-    expect(within(column("review")).getByLabelText("0 stories")).toBeTruthy();
+    expect(within(column("draft")).getByLabelText("1 story")).toBeTruthy();
 
     // Card details: epic, assignee, size, tags, and the over-400 warning.
     const invoice = screen.getByText("Invoice list").closest("li")!;
@@ -409,6 +407,125 @@ describe("ProjectPage new epic", () => {
   });
 });
 
+describe("ProjectPage board: empty lanes are not shown", () => {
+  const ALL = [
+    "draft", "review", "design", "implementation", "ready_for_testing", "testing", "pr_review", "finished", "cancelled",
+  ] as const;
+  type State = ReturnType<typeof story>["state"];
+
+  it("renders no lane, placeholder or zero count for a state without stories", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    for (const state of ["review", "design", "ready_for_testing", "testing", "pr_review"]) {
+      expect(screen.queryByRole("region", { name: `${state} stories` })).toBeNull();
+    }
+    expect(screen.queryByText("None")).toBeNull();
+    expect(screen.queryByLabelText("0 stories")).toBeNull();
+    expect(document.querySelectorAll(".board .column")).toHaveLength(4);
+  });
+
+  it("renders every lane, in workflow order, when every state has a story", async () => {
+    mockApi({
+      ...fullRoutes,
+      // Listed in reverse so the order cannot come from the server's response.
+      "/api/v1/projects/1/stories": [...ALL].reverse().map((state, i) =>
+        story({ id: i + 1, epic_id: 1, name: `Story in ${state}`, state: state as State })),
+    });
+    renderAt("/projects/1");
+    await screen.findByText("Story in draft");
+    expect(regionLabels()).toEqual(ALL.map((s) => `${s} stories`));
+    for (const state of ALL) {
+      expect(within(column(state)).getByText(`Story in ${state}`)).toBeTruthy();
+      expect(within(column(state)).getByLabelText("1 story")).toBeTruthy();
+    }
+    expect(screen.queryByText("None")).toBeNull();
+  });
+
+  it("hides finished and cancelled lanes when empty and shows them when they have stories", async () => {
+    mockApi({
+      ...fullRoutes,
+      "/api/v1/projects/1/stories": [story({ id: 1, epic_id: 1, name: "Only draft", state: "draft" })],
+    });
+    renderAt("/projects/1");
+    await screen.findByText("Only draft");
+    expect(regionLabels()).toEqual(["draft stories"]);
+    expect(screen.queryByRole("region", { name: "finished stories" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "cancelled stories" })).toBeNull();
+  });
+
+  it("shows a finished lane and a cancelled lane on their own once they have stories", async () => {
+    mockApi({
+      ...fullRoutes,
+      "/api/v1/projects/1/stories": [
+        story({ id: 1, epic_id: 1, name: "Done", state: "finished" }),
+        story({ id: 2, epic_id: 1, name: "Dropped", state: "cancelled" }),
+      ],
+    });
+    renderAt("/projects/1");
+    await screen.findByText("Done");
+    expect(regionLabels()).toEqual(["finished stories", "cancelled stories"]);
+  });
+
+  it("hides lanes that a filter empties and brings them back when the filter is cleared", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(regionLabels()).toEqual([
+      "draft stories", "implementation stories", "finished stories", "cancelled stories",
+    ]);
+
+    // Billing has only the draft and the cancelled story.
+    fireEvent.change(screen.getByLabelText("Epic"), { target: { value: "2" } });
+    expect(regionLabels()).toEqual(["draft stories", "cancelled stories"]);
+    expect(screen.queryByRole("region", { name: "implementation stories" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "finished stories" })).toBeNull();
+    expect(screen.queryByText("None")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Epic"), { target: { value: "" } });
+    expect(regionLabels()).toEqual([
+      "draft stories", "implementation stories", "finished stories", "cancelled stories",
+    ]);
+  });
+
+  it("evaluates emptiness after the assignee and tag filters too", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1?assignee=ann");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(regionLabels()).toEqual(["implementation stories", "finished stories"]);
+
+    fireEvent.change(screen.getByLabelText("Assignee"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "frontend" } });
+    expect(regionLabels()).toEqual(["draft stories"]);
+    expect(location()).toBe("/projects/1?tag=frontend");
+  });
+
+  it("applies a filter from the URL to the lanes on first render", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1?epic=1&tag=backend");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(regionLabels()).toEqual(["implementation stories", "finished stories"]);
+  });
+
+  it("shows no board at all when the filters match nothing", async () => {
+    mockApi(fullRoutes);
+    renderAt("/projects/1?assignee=ann&tag=frontend");
+    await screen.findByRole("heading", { name: "Alpha" });
+    expect(screen.getByText("No stories match the filters.")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Clear filters" }).length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole("region")).toHaveLength(0);
+    expect(document.querySelector(".board")).toBeNull();
+  });
+
+  it("shows no board when the project has no stories", async () => {
+    mockApi({ ...fullRoutes, "/api/v1/projects/1/stories": [] });
+    renderAt("/projects/1");
+    expect(await screen.findByText("This project has no stories yet.")).toBeTruthy();
+    expect(screen.queryAllByRole("region")).toHaveLength(0);
+    expect(document.querySelector(".board")).toBeNull();
+  });
+});
+
 describe("ProjectPage board: ready_for_testing", () => {
   it("shows a ready_for_testing column between implementation and testing", async () => {
     mockApi({
@@ -416,13 +533,14 @@ describe("ProjectPage board: ready_for_testing", () => {
       "/api/v1/projects/1/stories": [
         // Cast until the generated schema lists the new state; then it is a no-op.
         story({ id: 5, epic_id: 1, name: "Session audit", state: "ready_for_testing" as ReturnType<typeof story>["state"] }),
+        // Neighbours, so the order is visible now that empty lanes are not shown.
+        story({ id: 6, epic_id: 1, name: "Token refresh", state: "implementation" }),
+        story({ id: 7, epic_id: 1, name: "Password reset", state: "testing" }),
       ],
     });
     renderAt("/projects/1");
     await screen.findByText("Session audit");
-    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
-    expect(regions.indexOf("ready_for_testing stories")).toBe(regions.indexOf("implementation stories") + 1);
-    expect(regions.indexOf("testing stories")).toBe(regions.indexOf("ready_for_testing stories") + 1);
+    expect(regionLabels()).toEqual(["implementation stories", "ready_for_testing stories", "testing stories"]);
     expect(within(column("ready_for_testing")).getByText("Session audit")).toBeTruthy();
     expect(within(column("ready_for_testing")).getByLabelText("1 story")).toBeTruthy();
   });
