@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/dright/dprocess/internal/api"
-	"github.com/dright/dprocess/internal/github"
 	"github.com/dright/dprocess/internal/store"
 	"github.com/dright/dprocess/web"
 )
@@ -38,13 +37,21 @@ func main() {
 	}
 	defer st.Close()
 
-	apiSrv := &api.Server{Store: st, UI: web.FS()}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	apiSrv := &api.Server{
+		Store:          st,
+		UI:             web.FS(),
+		GitHubToken:    os.Getenv("DPROCESS_GITHUB_TOKEN"),
+		GitHubAPI:      os.Getenv("DPROCESS_GITHUB_API"),
+		GitHubInterval: *ghEvery,
+		Ctx:            ctx,
+	}
+	defer apiSrv.Close()
 	if *ghSync {
-		apiSrv.GitHub = &github.Syncer{
-			Store:    st,
-			Client:   &github.Client{BaseURL: getenv("DPROCESS_GITHUB_API", github.DefaultAPI), Token: os.Getenv("DPROCESS_GITHUB_TOKEN")},
-			Interval: *ghEvery,
-		}
+		apiSrv.StartGitHub()
+		log.Printf("github status sync enabled (every %s, token set: %t)", *ghEvery, apiSrv.GitHubToken != "")
 	}
 	srv := &http.Server{
 		Addr:              *addr,
@@ -52,12 +59,6 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if apiSrv.GitHub != nil {
-		go apiSrv.GitHub.Run(ctx)
-		log.Printf("github status sync enabled (every %s, token set: %t)", *ghEvery, os.Getenv("DPROCESS_GITHUB_TOKEN") != "")
-	}
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
