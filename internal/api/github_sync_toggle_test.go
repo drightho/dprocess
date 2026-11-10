@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -58,6 +60,15 @@ func newFakeGH(t *testing.T) *fakeGH {
 }
 
 func (f *fakeGH) setBlock(b bool) { f.mu.Lock(); f.block = b; f.mu.Unlock() }
+func (f *fakeGH) setStatus(s int) { f.mu.Lock(); f.status = s; f.mu.Unlock() }
+func (f *fakeGH) auth(i int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if i >= len(f.auths) {
+		return "<no request>"
+	}
+	return f.auths[i]
+}
 
 type syncEnv struct {
 	api  *Server
@@ -145,8 +156,8 @@ func TestToggleEnableWhenStartedWithSyncOff(t *testing.T) {
 		prs, _ := httpGetJSONArray(e.base + "/stories/1/pull-requests")
 		return len(prs) == 1 && prs[0].(map[string]any)["remote_status"].(map[string]any)["state"] == "merged"
 	})
-	if gh.auths[0] != "" {
-		t.Errorf("empty token must send no Authorization header, got %q", gh.auths[0])
+	if gh.auth(0) != "" {
+		t.Errorf("empty token must send no Authorization header, got %q", gh.auth(0))
 	}
 }
 
@@ -174,8 +185,8 @@ func TestToggleEnableUsesTokenAndNeverReturnsIt(t *testing.T) {
 		t.Fatalf("enable: %d", r1)
 	}
 	e.waitRun(t)
-	if gh.auths[0] != "Bearer s3cret-token" {
-		t.Errorf("Authorization = %q", gh.auths[0])
+	if gh.auth(0) != "Bearer s3cret-token" {
+		t.Errorf("Authorization = %q", gh.auth(0))
 	}
 	// Raw bodies must not contain the token.
 	for _, method := range []string{"GET", "PUT"} {
@@ -188,13 +199,10 @@ func TestToggleEnableUsesTokenAndNeverReturnsIt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf := new(strings.Builder)
-		b := make([]byte, 4096)
-		n, _ := resp.Body.Read(b)
-		buf.Write(b[:n])
+		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if strings.Contains(buf.String(), "s3cret") {
-			t.Errorf("%s response leaks the token: %s", method, buf.String())
+		if strings.Contains(string(b), "s3cret") {
+			t.Errorf("%s response leaks the token: %s", method, b)
 		}
 	}
 	// A token in the request is refused.
@@ -219,7 +227,7 @@ func TestToggleRepeatIsNoOp(t *testing.T) {
 			t.Errorf("repeat enable changed last_run_at: %v -> %v", before["last_run_at"], m["last_run_at"])
 		}
 	}
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	if gh.hits.Load() != hits {
 		t.Errorf("repeated enable ran another sync: %d -> %d requests", hits, gh.hits.Load())
 	}
@@ -326,7 +334,7 @@ func TestToggleDisableCancelsInFlightRunAndKeepsCache(t *testing.T) {
 		t.Fatal("in-flight request was not cancelled")
 	}
 	// The cancelled run must never show up later.
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	_, m = e.call("GET", "/github-sync", "")
 	e.assertDisabled(t, m)
 	// The cached remote_status survives.
@@ -362,8 +370,8 @@ func TestToggleReEnableStartsFresh(t *testing.T) {
 
 func TestToggleFailingSyncReportsLastError(t *testing.T) {
 	gh := newFakeGH(t)
-	gh.status = 401
-	e := newSyncEnv(t, gh, "bad", time.Hour, nil)
+	gh.setStatus(401)
+	e := newSyncEnv(t, gh, "bad-token-value", time.Hour, nil)
 	code, m := e.put(true)
 	if code != 200 || m["enabled"] != true {
 		t.Fatalf("enable: %d %v", code, m)
@@ -372,6 +380,9 @@ func TestToggleFailingSyncReportsLastError(t *testing.T) {
 	_, m = e.call("GET", "/github-sync", "")
 	if m["last_error"] == "" || m["last_error"] == nil {
 		t.Errorf("want last_error, got %v", m)
+	}
+	if le, _ := m["last_error"].(string); strings.Contains(le, "bad-token-value") {
+		t.Errorf("last_error leaks the token: %q", le)
 	}
 }
 
@@ -385,6 +396,9 @@ func TestToggleInjectedSyncerCountsAsEnabled(t *testing.T) {
 	api := &Server{Store: st, GitHub: syncer}
 	srv := httptest.NewServer(api.Handler())
 	t.Cleanup(func() { srv.Close(); api.Close(); st.Close() })
+	if api.GitHubSyncer() != syncer {
+		t.Errorf("GitHubSyncer() should return the injected syncer")
+	}
 	_, m := do(t, "PUT", srv.URL+"/api/v1/github-sync", `{"enabled":true}`)
 	if m["enabled"] != true {
 		t.Errorf("repeat on injected syncer: %v", m)
@@ -420,7 +434,7 @@ func TestToggleShutdownStopsLoop(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	n := gh.hits.Load()
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	if gh.hits.Load() != n {
 		t.Errorf("loop kept running after shutdown: %d -> %d", n, gh.hits.Load())
 	}
@@ -434,7 +448,7 @@ func TestToggleCloseStopsLoopWithoutCancellingCtx(t *testing.T) {
 	e.api.Close()
 	e.api.Close() // idempotent
 	n := gh.hits.Load()
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	if gh.hits.Load() != n {
 		t.Errorf("loop kept running after Close: %d -> %d", n, gh.hits.Load())
 	}
@@ -450,24 +464,84 @@ func TestToggleCloseWithNothingStarted(t *testing.T) {
 func TestToggleConcurrentRequests(t *testing.T) {
 	gh := newFakeGH(t)
 	e := newSyncEnv(t, gh, "", 5*time.Millisecond, nil)
+	url := e.base + "/github-sync"
 	var wg sync.WaitGroup
 	for g := 0; g < 6; g++ {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
 			for i := 0; i < 20; i++ {
-				var code int
-				if g%3 == 2 {
-					code, _ = e.call("GET", "/github-sync", "")
-				} else {
-					code, _ = e.put((i+g)%2 == 0)
+				method, body := "GET", ""
+				if g%3 != 2 {
+					method, body = "PUT", `{"enabled":false}`
+					if (i+g)%2 == 0 {
+						body = `{"enabled":true}`
+					}
 				}
-				if code != 200 {
-					t.Errorf("status %d", code)
+				req, _ := http.NewRequest(method, url, strings.NewReader(body))
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Errorf("%s: %v", method, err)
+					return
+				}
+				var m map[string]any
+				json.NewDecoder(resp.Body).Decode(&m)
+				resp.Body.Close()
+				if resp.StatusCode != 200 {
+					t.Errorf("%s: status %d %v", method, resp.StatusCode, m)
 					return
 				}
 			}
 		}(g)
 	}
 	wg.Wait()
+}
+
+// A server started with sync ON: main calls StartGitHub at startup.
+func TestStartGitHubThenToggle(t *testing.T) {
+	gh := newFakeGH(t)
+	e := newSyncEnv(t, gh, "", 20*time.Millisecond, nil)
+	e.api.StartGitHub()
+	e.api.StartGitHub() // no-op when already on
+	waitFor(t, "requests", func() bool { return gh.hits.Load() >= 2 })
+	e.waitRun(t)
+	if _, m := e.call("GET", "/github-sync", ""); m["enabled"] != true {
+		t.Fatalf("GET after StartGitHub: %v", m)
+	}
+	if e.api.GitHubSyncer() == nil {
+		t.Errorf("GitHubSyncer() nil after StartGitHub")
+	}
+
+	code, m := e.put(false)
+	if code != 200 {
+		t.Fatalf("disable: %d", code)
+	}
+	e.assertDisabled(t, m)
+	time.Sleep(60 * time.Millisecond) // let a request already past the check finish
+	n := gh.hits.Load()
+	time.Sleep(150 * time.Millisecond)
+	if gh.hits.Load() != n {
+		t.Errorf("requests continued after disable: %d -> %d", n, gh.hits.Load())
+	}
+	_, m = e.call("GET", "/github-sync", "")
+	e.assertDisabled(t, m)
+
+	if code, m := e.put(true); code != 200 || m["enabled"] != true {
+		t.Fatalf("re-enable: %d %v", code, m)
+	}
+	waitFor(t, "restarted sync", func() bool { return gh.hits.Load() > n })
+	e.waitRun(t)
+}
+
+// Zero interval means the 15 minute default: no ticker panic, immediate sync still runs.
+func TestToggleZeroIntervalUsesDefault(t *testing.T) {
+	gh := newFakeGH(t)
+	e := newSyncEnv(t, gh, "", 0, nil)
+	if code, m := e.put(true); code != 200 || m["enabled"] != true {
+		t.Fatalf("enable: %d %v", code, m)
+	}
+	e.waitRun(t)
+	if gh.hits.Load() != 1 {
+		t.Errorf("want exactly the immediate sync, got %d requests", gh.hits.Load())
+	}
 }
