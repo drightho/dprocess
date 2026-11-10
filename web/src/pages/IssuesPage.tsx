@@ -7,6 +7,7 @@ import NotFoundNotice from "../components/NotFoundNotice";
 import { formatTime } from "../lib/format";
 import { githubLabel } from "../lib/github";
 import RemoteStatusBadge from "../components/RemoteStatusBadge";
+import RepoWarningBadge from "../components/RepoWarningBadge";
 
 type Issue = Schemas["Issue"];
 
@@ -136,6 +137,7 @@ export default function IssuesPage() {
                       {githubLabel(i)}
                     </a>{" "}
                     <RemoteStatusBadge status={i.remote_status} />
+                    <RepoWarningBadge warnings={i.warnings} />
                     {i.title && <> {i.title}</>}
                   </strong>
                   {i.kind && <span className="chip">{i.kind}</span>}
