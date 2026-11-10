@@ -8,3 +8,8 @@ import "testing"
 func TestStory83(t *testing.T) {
 	t.Log("story 83: process test, nothing functional to test")
 }
+
+// TestStory85 records that story 85 has no feature to test either.
+func TestStory85(t *testing.T) {
+	t.Log("test")
+}
