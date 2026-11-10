@@ -176,6 +176,29 @@ describe("GitHubSyncPanel: toggling", () => {
     await waitFor(() => expect(s.state.gets).toBeGreaterThanOrEqual(2));
   });
 
+  it("keeps showing the last known state when the refresh after a toggle fails", async () => {
+    let putDone = false;
+    let failedGets = 0;
+    mockApi({
+      [URL_SYNC]: async (req: Request) => {
+        if (req.method === "PUT") {
+          putDone = true;
+          return on();
+        }
+        if (!putDone) return off;
+        failedGets++;
+        return problem(500, "internal error", "cannot read the sync state");
+      },
+    });
+    renderPanel();
+    fireEvent.click(await findSwitch());
+    await waitFor(() => expect(failedGets).toBeGreaterThanOrEqual(1));
+    await new Promise((r) => setTimeout(r, 50)); // let the failed refetch settle in the query
+    await waitFor(() => expect(isOn(theSwitch())).toBe(true));
+    expect(region().textContent).toContain(RUN_TEXT);
+    expect(alertTexts().some((t) => /could not load/i.test(t))).toBe(false);
+  });
+
   it("makes RemoteStatusBadge appear without a reload after enabling", async () => {
     syncServer(off, () => on());
     renderPanel(<RemoteStatusBadge status={{ state: "open", title: "T", checked_at: RUN }} />);

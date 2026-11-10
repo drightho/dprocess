@@ -26,9 +26,9 @@ export default function GitHubSyncPanel() {
   const sync = state.data;
   return (
     <section aria-label="GitHub status sync" className="sync-panel">
-      {state.isError ? (
+      {state.isError && !sync ? (
         <p role="alert" className="error">
-          Could not load the GitHub status sync state: {state.error.message}
+          Could not load the GitHub status sync state: {state.error?.message}
         </p>
       ) : sync ? (
         <>
