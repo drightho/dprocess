@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type Schemas } from "../api/client";
 import { githubLabel } from "../lib/github";
 import RemoteStatusBadge from "./RemoteStatusBadge";
+import RepoWarningBadge from "./RepoWarningBadge";
 
 type StoryDetail = Schemas["StoryDetail"];
 
@@ -35,6 +36,7 @@ export default function StoryIssues({ story }: { story: StoryDetail }) {
                 {githubLabel(i)}
               </a>{" "}
               <RemoteStatusBadge status={i.remote_status} />
+              <RepoWarningBadge warnings={i.warnings} />
               {i.title && <> {i.title}</>}
               {i.kind && <> <span className="chip">{i.kind}</span></>}{" "}
               <button type="button" aria-label={`Unlink issue ${githubLabel(i)}`} disabled={unlink.isPending} onClick={() => unlink.mutate(i.id)}>

@@ -21,7 +21,7 @@ describe("App routes", () => {
   it("serves the project overview at /projects/:id (e.g. after a reload)", async () => {
     mockApi({
       "/api/v1/health": { status: "ok" },
-      "/api/v1/projects/1": { id: 1, name: "Alpha", description: "", created_at: "", updated_at: "" },
+      "/api/v1/projects/1": { id: 1, name: "Alpha", description: "", github_repo_url: "", created_at: "", updated_at: "" },
       "/api/v1/projects/1/epics": [epic({ id: 1, name: "Auth" })],
       "/api/v1/projects/1/stories": [story({ id: 1, name: "Login" })],
     });

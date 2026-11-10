@@ -4,6 +4,7 @@ import { api, unwrap, type Schemas } from "../api/client";
 import { isTerminal } from "../lib/board";
 import { githubLabel } from "../lib/github";
 import RemoteStatusBadge from "./RemoteStatusBadge";
+import RepoWarningBadge from "./RepoWarningBadge";
 
 type StoryDetail = Schemas["StoryDetail"];
 
@@ -49,6 +50,7 @@ export default function PullRequestSection({ story }: { story: StoryDetail }) {
                 {githubLabel(pr)}
               </a>{" "}
               <RemoteStatusBadge status={pr.remote_status} />
+              <RepoWarningBadge warnings={pr.warnings} />
               {!frozen && (
                 <>
                   {" "}

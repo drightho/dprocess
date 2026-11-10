@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import ProjectPage from "./ProjectPage";
 import { RECENT_KEY, readRecent } from "../lib/recent";
@@ -9,6 +9,7 @@ const project = {
   id: 1,
   name: "Alpha",
   description: "The first project",
+  github_repo_url: "",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
@@ -424,5 +425,226 @@ describe("ProjectPage board: ready_for_testing", () => {
     expect(regions.indexOf("testing stories")).toBe(regions.indexOf("ready_for_testing stories") + 1);
     expect(within(column("ready_for_testing")).getByText("Session audit")).toBeTruthy();
     expect(within(column("ready_for_testing")).getByLabelText("1 story")).toBeTruthy();
+  });
+});
+
+describe("ProjectPage GitHub repository form", () => {
+  const URL1 = "https://github.com/acme/widgets";
+  const MSG_TEXT = "expected https://github.com/{owner}/{repo}";
+
+  /** Cached queries the save must refresh: they are kept active by this probe. */
+  function CacheProbe() {
+    const get = (key: unknown[], path: string) => useQuery({ queryKey: key, queryFn: () => fetch(new Request(new URL(path, window.location.origin))).then((r) => r.json()) });
+    get(["project", 1, "issues"], "/api/v1/projects/1/issues");
+    get(["story", 5], "/api/v1/stories/5");
+    get(["projects"], "/api/v1/projects");
+    return null;
+  }
+
+  /** A stateful fake of PATCH /projects/1 that stores what it is given. */
+  function setupRepo(saved = "", patch?: (body: Record<string, unknown>) => Response | Promise<Response> | undefined) {
+    const state = { saved, bodies: [] as Record<string, unknown>[] };
+    const server = mockApi({
+      ...fullRoutes,
+      "/api/v1/projects/1": async (req: Request) => {
+        if (req.method === "PATCH") {
+          const body = (await req.clone().json()) as Record<string, unknown>;
+          state.bodies.push(body);
+          const custom = await patch?.(body);
+          if (custom) {
+            if (custom.status < 400) state.saved = String(((await custom.clone().json()) as { github_repo_url?: string }).github_repo_url ?? "");
+            return custom;
+          }
+          state.saved = String(body.github_repo_url ?? "").trim();
+        }
+        return { ...project, github_repo_url: state.saved };
+      },
+      "/api/v1/projects/1/issues": [],
+      "/api/v1/stories/5": story({ id: 5 }),
+      "/api/v1/projects": [],
+    });
+    return { state, ...server };
+  }
+
+  function renderProject() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/projects/1"]}>
+          <Routes>
+            <Route path="/projects/:projectId" element={<><ProjectPage /><CacheProbe /></>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  const input = () => screen.getByRole("textbox", { name: "GitHub repository" }) as HTMLInputElement;
+  const form = () => screen.getByRole("form", { name: "GitHub repository" });
+  const save = () => within(form()).getByRole("button", { name: "Save" }) as HTMLButtonElement;
+  const type = (v: string) => fireEvent.change(input(), { target: { value: v } });
+  const loadedPage = () => screen.findByRole("heading", { name: "Alpha" });
+
+  it("shows an empty form and no repo link when no repo is linked", async () => {
+    setupRepo("");
+    renderProject();
+    await loadedPage();
+    expect(input().value).toBe("");
+    expect(input().getAttribute("placeholder")).toBe("https://github.com/owner/repo");
+    expect(input().getAttribute("type")).not.toBe("url");
+    expect(save().disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: "acme/widgets" })).toBeNull();
+    expect(document.querySelector('a[href^="https://github.com/"]')).toBeNull();
+  });
+
+  it("shows the saved URL in the input and an owner/repo link that opens in a new tab", async () => {
+    setupRepo(URL1);
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    const link = screen.getByRole("link", { name: "acme/widgets" });
+    expect(link.getAttribute("href")).toBe(URL1);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(save().disabled).toBe(true);
+  });
+
+  it("enables Save only when the trimmed text differs from the saved value", async () => {
+    setupRepo(URL1);
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    type(`  ${URL1}  `);
+    expect(save().disabled).toBe(true);
+    type("https://github.com/acme/other");
+    expect(save().disabled).toBe(false);
+    type(URL1);
+    expect(save().disabled).toBe(true);
+  });
+
+  it("sends the text exactly as typed, without a client-side format check", async () => {
+    const { state } = setupRepo("");
+    renderProject();
+    await loadedPage();
+    type("  not a url at all  ");
+    fireEvent.click(save());
+    await waitFor(() => expect(state.bodies).toEqual([{ github_repo_url: "  not a url at all  " }]));
+  });
+
+  it("clears the link with an empty value, at once and without a confirmation", async () => {
+    const { state } = setupRepo(URL1);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    type("");
+    expect(save().disabled).toBe(false);
+    fireEvent.click(save());
+    await waitFor(() => expect(state.bodies).toEqual([{ github_repo_url: "" }]));
+    await waitFor(() => expect(screen.queryByRole("link", { name: "acme/widgets" })).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(input().value).toBe("");
+    confirm.mockRestore();
+  });
+
+  it("sends a whitespace-only value as the empty string", async () => {
+    const { state } = setupRepo(URL1);
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    type("   ");
+    expect(save().disabled).toBe(false);
+    fireEvent.click(save());
+    await waitFor(() => expect(state.bodies).toEqual([{ github_repo_url: "" }]));
+    await waitFor(() => expect(screen.queryByRole("link", { name: "acme/widgets" })).toBeNull());
+  });
+
+  it("shows the server's detail in an alert inside the form on 422, keeps the saved state and dismisses it on edit", async () => {
+    setupRepo(URL1, () => problem(422, "invalid", MSG_TEXT));
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    type("nope");
+    fireEvent.click(save());
+    const alert = await within(form()).findByRole("alert");
+    expect(alert.textContent).toContain(MSG_TEXT);
+    expect(screen.getByRole("link", { name: "acme/widgets" }).getAttribute("href")).toBe(URL1);
+    expect(input().value).toBe("nope");
+    expect(save().disabled).toBe(false);
+    expect(screen.queryByText("Saved")).toBeNull();
+    type("nope2");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows Saved (not an alert, not an output), the canonical value from the server, and hides Saved on the next edit", async () => {
+    setupRepo("", () => json({ ...project, github_repo_url: URL1 }));
+    renderProject();
+    await loadedPage();
+    type("HTTPS://GitHub.com/Acme/Widgets.git");
+    fireEvent.click(save());
+    const saved = await screen.findByText("Saved");
+    expect(saved.getAttribute("role")).not.toBe("alert");
+    expect(saved.tagName).not.toBe("OUTPUT");
+    expect(saved.closest("output")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    expect(screen.getByRole("link", { name: "acme/widgets" }).getAttribute("href")).toBe(URL1);
+    type(URL1 + "x");
+    expect(screen.queryByText("Saved")).toBeNull();
+  });
+
+  it("does not update optimistically: while the request is pending the link and saved state stay and Save is disabled", async () => {
+    let release!: (r: Response) => void;
+    const pending = new Promise<Response>((res) => (release = res));
+    setupRepo(URL1, () => pending);
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(input().value).toBe(URL1));
+    type("https://github.com/acme/other");
+    fireEvent.click(save());
+    await waitFor(() => expect(save().disabled).toBe(true));
+    expect(screen.getByRole("link", { name: "acme/widgets" }).getAttribute("href")).toBe(URL1);
+    expect(screen.queryByRole("link", { name: "acme/other" })).toBeNull();
+    expect(screen.queryByText("Saved")).toBeNull();
+    release(json({ ...project, github_repo_url: "https://github.com/acme/other" }));
+    await screen.findByText("Saved");
+    expect(screen.getByRole("link", { name: "acme/other" })).toBeTruthy();
+  });
+
+  it("refetches the project, its issues, every cached story and the project list after a successful save", async () => {
+    const { calls } = setupRepo("");
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(calls).toContain("/api/v1/stories/5"));
+    const count = (path: string) => calls.filter((c) => c === path).length;
+    const before = {
+      project: count("/api/v1/projects/1"),
+      issues: count("/api/v1/projects/1/issues"),
+      story: count("/api/v1/stories/5"),
+      projects: count("/api/v1/projects"),
+    };
+    type(URL1);
+    fireEvent.click(save());
+    await screen.findByText("Saved");
+    await waitFor(() => {
+      // the PATCH itself is one more call on /projects/1, so expect at least two there
+      expect(count("/api/v1/projects/1")).toBeGreaterThanOrEqual(before.project + 2);
+      expect(count("/api/v1/projects/1/issues")).toBe(before.issues + 1);
+      expect(count("/api/v1/stories/5")).toBe(before.story + 1);
+      expect(count("/api/v1/projects")).toBe(before.projects + 1);
+    });
+  });
+
+  it("refetches nothing when the save is refused", async () => {
+    const { calls } = setupRepo("", () => problem(422, "invalid", MSG_TEXT));
+    renderProject();
+    await loadedPage();
+    await waitFor(() => expect(calls).toContain("/api/v1/stories/5"));
+    const before = calls.length;
+    type("nope");
+    fireEvent.click(save());
+    await within(form()).findByRole("alert");
+    expect(calls.length).toBe(before + 1); // only the PATCH
   });
 });

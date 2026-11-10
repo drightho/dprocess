@@ -5,6 +5,7 @@ import { api, ApiError, unwrap } from "../api/client";
 import EpicForm from "../components/EpicForm";
 import EpicList from "../components/EpicList";
 import FilterBar from "../components/FilterBar";
+import ProjectRepoForm from "../components/ProjectRepoForm";
 import NotFoundNotice from "../components/NotFoundNotice";
 import StoryBoard from "../components/StoryBoard";
 import {
@@ -107,6 +108,7 @@ export default function ProjectPage() {
       </p>
       <h1>{project.data.name}</h1>
       {project.data.description && <p className="meta">{project.data.description}</p>}
+      <ProjectRepoForm project={project.data} />
       <p>
         <Link to={`/projects/${project.data.id}/issues`}>Issues</Link>
       </p>

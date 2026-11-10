@@ -109,6 +109,17 @@ button { width: fit-content; cursor: pointer; }
 .badge.remote[data-remote="closed"] { --rs: var(--st-cancelled); }
 .badge.remote[data-remote="open"], .badge.remote[data-remote="merged"], .badge.remote[data-remote="closed"] { border-color: var(--rs); color: var(--rs); }
 
+.badge.warn {
+  display: inline-block;
+  padding: 0 0.5rem;
+  margin-right: 0.25rem;
+  border: 1px solid var(--bad);
+  border-radius: 4px;
+  color: var(--bad);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
 .chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .chip {
   padding: 0 0.4rem;
