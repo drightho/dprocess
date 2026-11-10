@@ -32,7 +32,11 @@ describe("App routes", () => {
   });
 
   it("serves the landing page at /", async () => {
-    mockApi({ "/api/v1/health": { status: "ok" }, "/api/v1/projects": [project({ id: 1, name: "Alpha" })] });
+    mockApi({
+      "/api/v1/health": { status: "ok" },
+      "/api/v1/projects": [project({ id: 1, name: "Alpha" })],
+      "/api/v1/github-sync": { enabled: false, last_run_at: null, last_error: "" },
+    });
     renderAt("/");
     expect(await screen.findByRole("search", { name: "Find a project" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Recently visited" })).toBeTruthy();
