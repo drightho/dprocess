@@ -2,9 +2,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/dright/dprocess/internal/github"
 	"github.com/dright/dprocess/internal/store"
@@ -15,8 +18,20 @@ type Server struct {
 	Store *store.Store
 	// UI, if set, is served at / with SPA fallback to index.html.
 	UI fs.FS
-	// GitHub is the optional read-only status sync; nil means disabled.
+	// GitHub is the optional read-only status sync; nil means disabled. Once
+	// the server is running, read it through GitHubSyncer (the API can change it).
 	GitHub *github.Syncer
+
+	// Settings used when the sync is turned on (StartGitHub or PUT /github-sync).
+	GitHubToken    string        // optional; empty sends no Authorization header
+	GitHubAPI      string        // empty = github.DefaultAPI
+	GitHubInterval time.Duration // zero = 15m
+	// Ctx is the parent context of sync loops started this way; nil = Background.
+	Ctx context.Context
+
+	mu     sync.Mutex
+	cancel context.CancelFunc // cancels the loop of the current syncer, nil if none or injected
+	loops  []chan struct{}    // done channels of started loops, for Close
 }
 
 // Handler returns the root HTTP handler.

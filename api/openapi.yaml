@@ -42,13 +42,31 @@ paths:
       tags: [System]
       operationId: getGitHubSync
       summary: Whether the optional read-only GitHub status sync is running
-      description: The sync is off unless the server was started with --github-sync. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
+      description: The sync is off at startup unless the server was started with --github-sync, and can be turned on or off while running with PUT. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
       responses:
         "200":
           description: Sync state
           content:
             application/json:
               schema: { $ref: "#/components/schemas/GitHubSync" }
+    put:
+      tags: [System]
+      operationId: setGitHubSync
+      summary: Turn the GitHub status sync on or off while the server is running
+      description: "Enabling builds the syncer from the server's startup settings (DPROCESS_GITHUB_TOKEN, DPROCESS_GITHUB_API, --github-sync-interval), starts the loop and runs a sync at once; the response does not wait for that run, so last_run_at may still be null and clients poll GET. Disabling returns at once, cancels the loop including a run in flight and keeps the cached remote_status values; GET then reports enabled false, last_run_at null and last_error empty. Repeating the current value changes nothing. A failing sync never fails this request; last_error says why. The setting lives in memory only: after a restart the flag and environment decide again. The token is never accepted or returned."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GitHubSyncUpdate" }
+      responses:
+        "200":
+          description: Sync state after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GitHubSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /projects:
     get:
@@ -963,6 +981,11 @@ components:
         enabled: { type: boolean }
         last_run_at: { type: string, format: date-time, nullable: true }
         last_error: { type: string, description: "Empty when the last run was clean" }
+    GitHubSyncUpdate:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean, description: "true turns the sync on, false turns it off; null or missing is refused with 422" }
     RemoteStatus:
       type: object
       description: Cached GitHub status. unknown means never synced, older than 24 hours, or no longer visible on GitHub.

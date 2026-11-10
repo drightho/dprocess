@@ -30,10 +30,14 @@ export interface paths {
         };
         /**
          * Whether the optional read-only GitHub status sync is running
-         * @description The sync is off unless the server was started with --github-sync. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
+         * @description The sync is off at startup unless the server was started with --github-sync, and can be turned on or off while running with PUT. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong.
          */
         get: operations["getGitHubSync"];
-        put?: never;
+        /**
+         * Turn the GitHub status sync on or off while the server is running
+         * @description Enabling builds the syncer from the server's startup settings (DPROCESS_GITHUB_TOKEN, DPROCESS_GITHUB_API, --github-sync-interval), starts the loop and runs a sync at once; the response does not wait for that run, so last_run_at may still be null and clients poll GET. Disabling returns at once, cancels the loop including a run in flight and keeps the cached remote_status values; GET then reports enabled false, last_run_at null and last_error empty. Repeating the current value changes nothing. A failing sync never fails this request; last_error says why. The setting lives in memory only: after a restart the flag and environment decide again. The token is never accepted or returned.
+         */
+        put: operations["setGitHubSync"];
         post?: never;
         delete?: never;
         options?: never;
@@ -605,6 +609,10 @@ export interface components {
             /** @description Empty when the last run was clean */
             last_error: string;
         };
+        GitHubSyncUpdate: {
+            /** @description true turns the sync on, false turns it off; null or missing is refused with 422 */
+            enabled: boolean;
+        };
         /** @description Cached GitHub status. unknown means never synced, older than 24 hours, or no longer visible on GitHub. */
         RemoteStatus: {
             /** @enum {string} */
@@ -769,6 +777,32 @@ export interface operations {
                     "application/json": components["schemas"]["GitHubSync"];
                 };
             };
+        };
+    };
+    setGitHubSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitHubSyncUpdate"];
+            };
+        };
+        responses: {
+            /** @description Sync state after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubSync"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     listProjects: {
