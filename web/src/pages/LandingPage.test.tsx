@@ -109,7 +109,10 @@ describe("recently visited projects", () => {
   });
 
   it("reports when the projects cannot be loaded", async () => {
-    mockApi({ "/api/v1/projects": problem(500, "internal error", "database is on fire") });
+    mockApi({
+      "/api/v1/projects": problem(500, "internal error", "database is on fire"),
+      "/api/v1/github-sync": { enabled: false, last_run_at: null, last_error: "" },
+    });
     renderLanding();
     expect((await screen.findByRole("alert")).textContent).toContain("database is on fire");
   });
@@ -286,6 +289,7 @@ describe("creating a project from the landing page", () => {
 
   it("shows the server's message when creating fails", async () => {
     mockApi({
+      "/api/v1/github-sync": { enabled: false, last_run_at: null, last_error: "" },
       "/api/v1/projects": (req: Request) =>
         req.method === "POST" ? problem(422, "validation failed", "name is required") : base,
     });
@@ -294,5 +298,22 @@ describe("creating a project from the landing page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("name is required"));
     expect(location()).toBe("/");
+  });
+});
+
+describe("GitHub status sync panel on the landing page", () => {
+  it("appears below the new-project form", async () => {
+    mockApi({
+      "/api/v1/projects": base,
+      "/api/v1/github-sync": { enabled: false, last_run_at: null, last_error: "" },
+    });
+    renderLanding();
+    const sw = await screen.findByRole("switch", { name: "GitHub status sync" });
+    const heading = screen.getByRole("heading", { name: "New project" });
+    const create = screen.getByRole("button", { name: "Create project" });
+    const after = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(heading.compareDocumentPosition(sw) & after).toBeTruthy();
+    expect(create.compareDocumentPosition(sw) & after).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "GitHub status sync" })).getByRole("switch")).toBe(sw);
   });
 });
