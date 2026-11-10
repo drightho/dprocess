@@ -6,6 +6,7 @@ import {
   groupByState,
   hasFilters,
   NO_FILTERS,
+  nonEmptyStates,
   readFilters,
   STORY_STATES,
   writeFilters,
@@ -97,6 +98,47 @@ describe("groupByState", () => {
     expect(ids(g.finished)).toEqual([1]);
     expect(ids(g.implementation)).toEqual([2]);
     expect(ids(g.cancelled)).toEqual([4]);
+  });
+});
+
+describe("nonEmptyStates", () => {
+  it("is empty when there are no stories", () => {
+    expect(nonEmptyStates([])).toEqual([]);
+  });
+
+  it("lists only the states that have stories", () => {
+    expect(nonEmptyStates(stories)).toEqual(["draft", "implementation", "finished", "cancelled"]);
+  });
+
+  it("keeps workflow order whatever the order of the stories", () => {
+    const shuffled = [
+      story({ id: 1, state: "cancelled" }),
+      story({ id: 2, state: "testing" }),
+      story({ id: 3, state: "draft" }),
+      story({ id: 4, state: "finished" }),
+      story({ id: 5, state: "draft" }),
+    ];
+    expect(nonEmptyStates(shuffled)).toEqual(["draft", "testing", "finished", "cancelled"]);
+  });
+
+  it("treats finished and cancelled like any other state", () => {
+    expect(nonEmptyStates([story({ id: 1, state: "finished" })])).toEqual(["finished"]);
+    expect(nonEmptyStates([story({ id: 1, state: "cancelled" })])).toEqual(["cancelled"]);
+    expect(nonEmptyStates([story({ id: 1, state: "draft" })])).toEqual(["draft"]);
+  });
+
+  it("returns every state when every state has a story", () => {
+    const all = STORY_STATES.map((state, i) => story({ id: i + 1, state }));
+    expect(nonEmptyStates(all)).toEqual([...STORY_STATES]);
+  });
+
+  it("returns a fresh array and leaves STORY_STATES alone", () => {
+    const all = STORY_STATES.map((state, i) => story({ id: i + 1, state }));
+    const before = [...STORY_STATES];
+    const out = nonEmptyStates(all);
+    expect(out).not.toBe(STORY_STATES);
+    out.reverse();
+    expect([...STORY_STATES]).toEqual(before);
   });
 });
 
