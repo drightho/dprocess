@@ -78,20 +78,13 @@ the database file. Never cancel the story or skip a state; the only moves this s
      convergence, or when one holds a `REJECT:` after the other has seen its reasons. A question only the user can
      answer (an unclear requirement) goes to the user (AskUserQuestion) and the answer back to both; if the user cannot
      settle it, treat it as not agreed.
-6. **Both approve: approve and merge.** In this order:
+6. **Both approve: merge.** In this order:
    1. **Re-check** `gh pr view <url> --json state,mergeable,statusCheckRollup`. If checks fail or the PR is not
-      mergeable, that is a finding: go to step 7 without approving (conflicts to resolve are the implementer's job,
-      not this skill's).
-   2. **Approve the PR on GitHub** with a summary built from both sides: what the interviewee (the reviewee) confirmed it
-      checked and the evidence it gave, what the interviewer (the reviewer) verified, and the questions raised and how
-      they were settled. Write it to a file and run `gh pr review <url> --approve --body-file <file>`. If GitHub refuses
-      the approval (for example you cannot approve your own PR), post the same text with
-      `gh pr comment <url> --body-file <file>` and say so in the report. If even that fails, report the message and
-      stop with the story in `pr_review`.
-   3. **Merge** it, using the repository's style (the history shows squash merges): `gh pr merge <url> --squash`. Do
+      mergeable, that is a finding: go to step 7.
+   2. **Merge** it, using the repository's style (the history shows squash merges): `gh pr merge <url> --squash --delete-branch`. Do
       not use `--admin` and do not bypass protections. If the merge is refused, report the message, leave the story in
       `pr_review` and stop.
-   4. **After a successful merge:**
+   3. **After a successful merge:**
       - `$DP comment ID "<text>"`: the PR URL, the merge commit, and the review result (rounds, questions raised, how they were settled).
       - `$DP move ID finished --reason "Pull request <url> reviewed and merged"`. If the server refuses (for example a
         dependency is not finished), report its message, leave the story in `pr_review` and tell the user the PR is
