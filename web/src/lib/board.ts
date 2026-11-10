@@ -99,6 +99,12 @@ export function groupByState(stories: readonly Story[]): Record<StoryState, Stor
   return groups;
 }
 
+/** The states that have at least one of the given stories, in workflow order (a fresh array). */
+export function nonEmptyStates(stories: readonly Story[]): StoryState[] {
+  const used = new Set(stories.map((s) => s.state));
+  return STORY_STATES.filter((state) => used.has(state));
+}
+
 /** How many of an epic's stories exist and how many are finished or cancelled. */
 export function epicProgress(
   epicId: number,
