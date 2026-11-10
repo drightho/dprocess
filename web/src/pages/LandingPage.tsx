@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, unwrap } from "../api/client";
+import GitHubSyncPanel from "../components/GitHubSyncPanel";
 import NewProjectForm from "../components/NewProjectForm";
 import ProjectSearch from "../components/ProjectSearch";
 import { pruneRecent, readRecent } from "../lib/recent";
@@ -63,6 +64,9 @@ export default function LandingPage() {
 
       <h2>New project</h2>
       <NewProjectForm />
+
+      <h2>GitHub status sync</h2>
+      <GitHubSyncPanel />
     </section>
   );
 }

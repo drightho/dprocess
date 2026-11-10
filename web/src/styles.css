@@ -193,3 +193,8 @@ form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; max
 .comments p { margin: 0.15rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 a.chip { text-decoration: none; }
 form.inline.wide input { width: min(34rem, 100%); }
+
+.sync-panel { display: grid; gap: 0.5rem; max-width: 28rem; }
+.sync-panel p { margin: 0; }
+label.switch { display: flex; align-items: center; gap: 0.5rem; }
+label.switch input { padding: 0; }
