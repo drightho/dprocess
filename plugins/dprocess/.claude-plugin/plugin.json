@@ -1,6 +1,6 @@
 {
   "name": "dprocess",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "icon": "./assets/icon.png",
   "description": "Skills and agents for working with a DProcess project plan from Claude Code: init (point the plugin at your server), review a draft story until it is clear, design a reviewed story by writing its tests first, implement a designed story with a dev who cannot see the tests, test it and open the pull request, review that pull request and merge it, complete the whole lifecycle of one or more stories in one go (dependencies first), and a fresh-eyes subagent without long-term memory.",
   "author": {
