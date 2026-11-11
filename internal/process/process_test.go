@@ -13,3 +13,8 @@ func TestStory83(t *testing.T) {
 func TestStory85(t *testing.T) {
 	t.Log("test")
 }
+
+// TestStory86 records that story 86 has no feature to test either.
+func TestStory86(t *testing.T) {
+	t.Log("test")
+}
