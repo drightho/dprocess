@@ -78,6 +78,7 @@ type epicInput struct {
 }
 
 // canonicalRepo validates a non-blank repository URL; blank means "no link".
+// Handlers call it before any write, so a refused URL changes nothing.
 func canonicalRepo(p *string) (*string, error) {
 	if p == nil {
 		return nil, nil
