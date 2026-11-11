@@ -27,7 +27,7 @@ func getenv(key, def string) string {
 func main() {
 	dbPath := flag.String("db", getenv("DPROCESS_DB", "./dprocess.db"), "SQLite database file")
 	addr := flag.String("addr", getenv("DPROCESS_ADDR", "127.0.0.1:8080"), "listen address")
-	ghSync := flag.Bool("github-sync", getenv("DPROCESS_GITHUB_SYNC", "") == "1", "periodically read the status of linked GitHub issues and pull requests (read-only; token from DPROCESS_GITHUB_TOKEN)")
+	ghSync := flag.Bool("github-sync", getenv("DPROCESS_GITHUB_SYNC", "") == "1", "periodically import the open, unassigned GitHub issues of linked projects and refresh the status of linked GitHub issues and pull requests (read-only; token from DPROCESS_GITHUB_TOKEN)")
 	ghEvery := flag.Duration("github-sync-interval", 15*time.Minute, "time between GitHub status refreshes")
 	flag.Parse()
 

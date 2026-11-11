@@ -1,6 +1,8 @@
-// Package github is the optional, strictly read-only GitHub status sync. It
-// only issues GET requests and caches the title and open/closed/merged state of
-// the issues and pull requests that DProcess already links to.
+// Package github is the optional, strictly read-only GitHub sync: it only
+// issues GET requests. It imports the open, unassigned issues of a project's
+// linked repository as issue references, and caches the title and
+// open/closed/merged state of the issues and pull requests that DProcess
+// already links to.
 package github
 
 import (
@@ -48,10 +50,7 @@ func (c *Client) Fetch(ctx context.Context, it store.RemoteItem) (title, state s
 	if it.Kind == store.KindPull {
 		path = "pulls"
 	}
-	base := strings.TrimRight(c.BaseURL, "/")
-	if base == "" {
-		base = DefaultAPI
-	}
+	base := c.impBase()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/repos/%s/%s/%d", base, it.Repo, path, it.Number), nil)
 	if err != nil {
@@ -62,21 +61,15 @@ func (c *Client) Fetch(ctx context.Context, it store.RemoteItem) (title, state s
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	hc := c.HTTP
-	if hc == nil {
-		hc = &http.Client{Timeout: 15 * time.Second}
-	}
-	resp, err := hc.Do(req)
+	resp, err := c.impHTTP().Do(req)
 	if err != nil {
 		return "", "", err
 	}
 	defer resp.Body.Close()
+	if err := impFatal(resp); err != nil {
+		return "", "", err
+	}
 	switch {
-	case resp.StatusCode == http.StatusUnauthorized:
-		return "", "", ErrBadToken
-	case resp.StatusCode == http.StatusTooManyRequests,
-		resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0":
-		return "", "", ErrRateLimited
 	case resp.StatusCode == http.StatusNotFound, resp.StatusCode == http.StatusForbidden:
 		return "", "", errGone
 	case resp.StatusCode != http.StatusOK:
@@ -96,6 +89,25 @@ func (c *Client) Fetch(ctx context.Context, it store.RemoteItem) (title, state s
 	return r.Title, state, nil
 }
 
+// impBase is the GitHub API base to call: the configured one, or the public API
+// when none is set. The imp* helpers are named for the issue import but serve
+// the status fetch too.
+func (c *Client) impBase() string {
+	base := strings.TrimRight(c.BaseURL, "/")
+	if base == "" {
+		return DefaultAPI
+	}
+	return base
+}
+
+// impHTTP is the HTTP client to use; a zero Client polls with a timeout.
+func (c *Client) impHTTP() *http.Client {
+	if c.HTTP == nil {
+		return &http.Client{Timeout: 15 * time.Second}
+	}
+	return c.HTTP
+}
+
 // Status is what the sync reports about itself.
 type Status struct {
 	Enabled   bool    `json:"enabled"`
@@ -103,7 +115,8 @@ type Status struct {
 	LastError string  `json:"last_error"`
 }
 
-// Syncer periodically refreshes the cached status of every linked item.
+// Syncer periodically imports new issue references and refreshes the cached
+// status of every linked item.
 type Syncer struct {
 	Store    *store.Store
 	Client   *Client
@@ -124,7 +137,8 @@ func (y *Syncer) Status() Status {
 	return Status{Enabled: true, LastRunAt: y.lastRun, LastError: y.lastErr}
 }
 
-// RunOnce refreshes every linked item. Items that cannot be read keep their
+// RunOnce imports the open, unassigned GitHub issues of the linked repositories
+// and refreshes every linked item. Items that cannot be read keep their
 // old (eventually stale, hence unknown) status; a bad token or rate limit ends
 // the run. It never writes to GitHub and never fails the server.
 func (y *Syncer) RunOnce(ctx context.Context) {
@@ -140,14 +154,22 @@ func (y *Syncer) RunOnce(ctx context.Context) {
 }
 
 func (y *Syncer) sync(ctx context.Context) error {
+	// The import runs first, so the references it creates are refreshed in this
+	// same run.
+	firstErr := y.importIssues(ctx)
+	if impIsFatal(firstErr) {
+		return firstErr
+	}
+	if err := ctx.Err(); err != nil {
+		return impKeep(firstErr, err)
+	}
 	items, err := y.Store.RemoteItems()
 	if err != nil {
-		return err
+		return impKeep(firstErr, err)
 	}
-	var firstErr error
 	for _, it := range items {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return impKeep(firstErr, ctx.Err())
 		}
 		title, state, err := y.Client.Fetch(ctx, it)
 		switch {
