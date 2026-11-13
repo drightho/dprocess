@@ -125,8 +125,16 @@ func TestGitHubSyncSpecDescribesIssueImport(t *testing.T) {
 			mustContainAll(t, m+" description", d,
 				"DPROCESS_GITHUB_TOKEN", "repositor", "import", "open", "unassigned",
 				"issue reference", "pull request", "token owner")
-			mustMatch(t, m+" description", d, assignRe, "an assignment word (assign, assigned, assignment)")
-			mustMatch(t, m+" description", d, allProjectsRe, "every/all near project")
+			// The assignment and the every/all-projects condition must share a sentence.
+			same := false
+			for _, sent := range strings.Split(d, ". ") {
+				if assignRe.MatchString(sent) && allProjectsRe.MatchString(sent) {
+					same = true
+				}
+			}
+			if !same {
+				t.Errorf("%s description has no sentence with both an assignment word and every/all near project:\n%s", m, d)
+			}
 			mustMatch(t, m+" description", d, linkedRepoRe, "linked near repository or github_repo_url")
 		})
 	}
