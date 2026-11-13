@@ -126,3 +126,24 @@ export function epicProgress(
   }
   return { total, finished, cancelled };
 }
+
+/** The most story cards a board lane shows until it is expanded. */
+export const LANE_LIMIT = 5;
+
+/**
+ * A lane's stories, most recently updated first (a higher id first when
+ * updated_at is equal). Returns a fresh array; the input is not changed.
+ */
+export function sortByRecentUpdate<T extends { id: number; updated_at: string }>(stories: readonly T[]): T[] {
+  // Compared as instants, so "...00Z" and "...00.000Z" for the same moment are equal.
+  const time = new Map(stories.map((s) => [s, Date.parse(s.updated_at)]));
+  return [...stories].sort((a, b) => time.get(b)! - time.get(a)! || b.id - a.id);
+}
+
+/**
+ * The cards a lane shows: its first LANE_LIMIT stories while capped, all of
+ * them when expanded. Expects the stories already sorted; returns a fresh array.
+ */
+export function capLane<T>(stories: readonly T[], expanded: boolean): T[] {
+  return expanded ? [...stories] : stories.slice(0, LANE_LIMIT);
+}
