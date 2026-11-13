@@ -4,6 +4,8 @@ package api
 // part of the sync that is turned on by the flag or the API.
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -18,13 +20,15 @@ import (
 // and the pull request #7 that newSyncEnv links.
 type importGH struct {
 	*httptest.Server
-	mu      sync.Mutex
-	log     []string // "list" or "item", in order
-	auths   []string // Authorization of the list requests
-	methods []string
-	block   bool          // hold list requests until their context ends
-	arrived chan struct{} // signalled on each list request
-	ctxDone chan struct{} // signalled when a held request's context ended
+	mu        sync.Mutex
+	log       []string // "list" or "item", in order
+	auths     []string // Authorization of the list requests
+	methods   []string
+	posts     []string // story 88: bodies of the assignment POSTs for #5
+	badWrites []string
+	block     bool          // hold list requests until their context ends
+	arrived   chan struct{} // signalled on each list request
+	ctxDone   chan struct{} // signalled when a held request's context ended
 }
 
 func newImportGH(t *testing.T) *importGH {
@@ -32,10 +36,24 @@ func newImportGH(t *testing.T) *importGH {
 	g := &importGH{arrived: make(chan struct{}, 100), ctxDone: make(chan struct{}, 100)}
 	g.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		kind := "item"
-		if r.URL.Path == "/repos/acme/w/issues" {
+		switch {
+		case r.URL.Path == "/repos/acme/w/issues":
 			kind = "list"
+		case r.URL.Path == "/user":
+			kind = "user"
+		case r.URL.Path == "/repos/acme/w/issues/5/assignees" && r.Method == http.MethodPost:
+			kind = "assign"
+		}
+		var body []byte
+		if kind == "assign" {
+			body, _ = io.ReadAll(r.Body)
 		}
 		g.mu.Lock()
+		if kind == "assign" {
+			g.posts = append(g.posts, string(body))
+		} else if r.Method != http.MethodGet {
+			g.badWrites = append(g.badWrites, r.Method+" "+r.URL.Path)
+		}
 		g.log = append(g.log, kind)
 		g.methods = append(g.methods, r.Method)
 		if kind == "list" {
@@ -59,6 +77,11 @@ func newImportGH(t *testing.T) *importGH {
 			}
 			w.Write([]byte(`[{"number":5,"title":"Imported from GitHub","state":"open","assignee":null,"assignees":[],` +
 				`"html_url":"https://github.com/Other-Org/Renamed/issues/5"}]`))
+		case kind == "user":
+			w.Write([]byte(`{"login":"bot"}`))
+		case kind == "assign":
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"number":5,"assignees":[{"login":"bot"}]}`))
 		case r.URL.Path == "/repos/acme/w/issues/5":
 			w.Write([]byte(`{"number":5,"title":"Imported from GitHub","state":"open"}`))
 		case r.URL.Path == "/repos/acme/w/pulls/7":
@@ -71,10 +94,8 @@ func newImportGH(t *testing.T) *importGH {
 		g.Close()
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		for _, m := range g.methods {
-			if m != http.MethodGet {
-				t.Errorf("the sync must only read GitHub: got %s", m)
-			}
+		for _, m := range g.badWrites {
+			t.Errorf("the only write the sync may send is the assignment POST for #5: got %s", m)
 		}
 	})
 	return g
@@ -153,6 +174,24 @@ func TestImportOnEnableViaPUT(t *testing.T) {
 		t.Fatalf("enable: %d %v", code, m)
 	}
 	assertImported(t, e, g)
+}
+
+// Story 88, end to end: the immediate run after PUT {"enabled": true} assigns
+// the imported issue to the token owner with exactly one POST.
+func TestAssignOnEnableViaPUT(t *testing.T) {
+	g := newImportGH(t)
+	e := newImportSyncEnv(t, g, "tok")
+	e.put(true)
+	assertImported(t, e, g)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.posts) != 1 {
+		t.Fatalf("want exactly one assignment POST for #5, got %v", g.posts)
+	}
+	var b map[string][]string
+	if err := json.Unmarshal([]byte(g.posts[0]), &b); err != nil || !reflect.DeepEqual(b["assignees"], []string{"bot"}) || len(b) != 1 {
+		t.Errorf("assignment body %q, want {\"assignees\":[\"bot\"]}", g.posts[0])
+	}
 }
 
 // AC13: the immediate run at startup (--github-sync) imports and refreshes.

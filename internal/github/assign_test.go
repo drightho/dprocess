@@ -362,8 +362,8 @@ func TestAssignWriteCap(t *testing.T) {
 		e.run()
 		e.wantPosts(keys("acme/w", 21, 25)...)
 		e.wantNoError()
-		if n := e.gh.users(); n != 1 {
-			t.Errorf("GET /user on the second run: %d", n)
+		if n := e.gh.users(); n != 0 {
+			t.Errorf("GET /user on the second run: %d, want none (same Syncer, owner known)", n)
 		}
 	})
 	t.Run("counted across repositories", func(t *testing.T) {
@@ -501,6 +501,26 @@ func TestAssignLookupFailure(t *testing.T) {
 			e.wantNoError()
 		})
 	}
+	t.Run("two repositories: at most one lookup, no assignment", func(t *testing.T) {
+		e := newImportEnv(t, "tok")
+		p1 := e.project("One", "acme/w")
+		p2 := e.project("Two", "other/r")
+		e.gh.repo("acme/w", ghIssue{Number: 1})
+		e.gh.repo("other/r", ghIssue{Number: 1})
+		e.gh.userFail = &ghFail{Status: 500}
+
+		e.run()
+
+		e.wantNumbers(p1, []int64{1})
+		e.wantNumbers(p2, []int64{1})
+		e.wantPosts()
+		if n := e.gh.users(); n > 1 {
+			t.Errorf("%d GET /user in one run, want at most one", n)
+		}
+		if !strings.HasPrefix(e.lastErr(), "github assign: cannot determine the token owner: ") {
+			t.Errorf("last_error %q", e.lastErr())
+		}
+	})
 	t.Run("an earlier error of the run is kept", func(t *testing.T) {
 		e := newImportEnv(t, "tok")
 		pb := e.project("B", "broken/repo")
