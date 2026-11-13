@@ -7,6 +7,7 @@ import {
   hasFilters,
   NO_FILTERS,
   nonEmptyStates,
+  openEpics,
   readFilters,
   STORY_STATES,
   writeFilters,
@@ -154,5 +155,23 @@ describe("ready_for_testing", () => {
   it("sits between implementation and testing", () => {
     const i = STORY_STATES.indexOf("implementation");
     expect([...STORY_STATES].slice(i, i + 3)).toEqual(["implementation", "ready_for_testing", "testing"]);
+  });
+});
+
+describe("openEpics", () => {
+  it("keeps the epics that are not finished or cancelled, in the given order", () => {
+    const all = [
+      epic({ id: 3, state: "ready" }),
+      epic({ id: 1, state: "finished" }),
+      epic({ id: 2, state: "draft" }),
+      epic({ id: 4, state: "cancelled" }),
+      epic({ id: 5, state: "review" }),
+    ];
+    expect(openEpics(all).map((e) => e.id)).toEqual([3, 2, 5]);
+  });
+
+  it("returns nothing when every epic is closed, or there are none", () => {
+    expect(openEpics([epic({ state: "finished" }), epic({ state: "cancelled" })])).toEqual([]);
+    expect(openEpics([])).toEqual([]);
   });
 });

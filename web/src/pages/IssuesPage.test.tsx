@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import IssuesPage from "./IssuesPage";
-import { issue, json, mockApi, problem, project, story, type Issue } from "../test/fixtures";
+import { epic, issue, json, mockApi, problem, project, story, type Epic, type Issue } from "../test/fixtures";
 
 const stories = [
   story({ id: 1, epic_id: 1, project_id: 1, name: "Login", state: "implementation" }),
@@ -12,6 +12,10 @@ const stories = [
 
 interface Setup {
   issues?: Issue[];
+  /** The project's epics (GET /projects/1/epics); none by default. */
+  epics?: Epic[];
+  /** Answer POST /epics/{id}/stories with this instead of creating the story. */
+  refuseStory?: (body: Record<string, unknown>) => Response | undefined;
   /** Answer a write with this instead of applying it. */
   refuse?: (method: string, body: Record<string, unknown> | null) => Response | undefined;
 }
@@ -36,8 +40,22 @@ function setup(init: Setup = {}) {
       },
     ]),
   );
+  const storyRoutes = Object.fromEntries(
+    [1, 2, 3, 4].map((n) => [
+      `/api/v1/epics/${n}/stories`,
+      async (req: Request) => {
+        const body = (await req.json()) as Record<string, unknown>;
+        w.writes.push({ method: req.method, path: `/epics/${n}/stories`, body });
+        const refused = init.refuseStory?.(body);
+        if (refused) return refused;
+        return json(story({ id: 10, epic_id: n, project_id: 1, name: String(body.name), description: String(body.description ?? "") }), 201);
+      },
+    ]),
+  );
   const server = mockApi({
     ...issueRoutes,
+    ...storyRoutes,
+    "/api/v1/projects/1/epics": init.epics ?? [],
     "/api/v1/projects/1": project({ id: 1, name: "Alpha" }),
     "/api/v1/projects/1/stories": stories,
     "/api/v1/projects/1/issues": async (req: Request) => {
@@ -69,6 +87,7 @@ function renderAt(url = "/projects/1/issues") {
         <Routes>
           <Route path="/projects/:projectId/issues" element={<IssuesPage />} />
           <Route path="/projects/:projectId" element={<p>project page</p>} />
+          <Route path="/stories/:storyId" element={<p>story page</p>} />
         </Routes>
         <LocationProbe />
       </MemoryRouter>
@@ -363,5 +382,194 @@ describe("IssuesPage repo_mismatch badge", () => {
     await screen.findByText(/acme\/widgets#42/);
     expect(screen.queryByLabelText(MSG)).toBeNull();
     expect(screen.queryByText("other repo")).toBeNull();
+  });
+});
+
+describe("IssuesPage creating a story from an issue", () => {
+  const epics = [
+    epic({ id: 1, name: "Auth", state: "ready" }),
+    epic({ id: 2, name: "Done work", state: "finished" }),
+    epic({ id: 3, name: "Billing", state: "draft" }),
+    epic({ id: 4, name: "Dropped", state: "cancelled" }),
+  ];
+  const unlinked = issue({ id: 2, github_url: "https://github.com/acme/widgets/issues/43", number: 43, title: "Slow search", story_id: null });
+  const linkedElsewhere = issue({ id: 3, github_url: "https://github.com/acme/widgets/issues/44", number: 44, title: "Ghost", story_id: 99 }); // a story not in the list
+  const createButton = (label: string) => screen.queryByRole("button", { name: `Create story from issue ${label}` }) as HTMLButtonElement | null;
+  const cardOf = (label: string) => screen.getByRole("link", { name: label }).closest(".card") as HTMLElement;
+  const createForm = () => screen.getByRole("form", { name: "Create story" });
+  const invalidatedKeys = (invalidate: ReturnType<typeof renderAt>["invalidate"]) =>
+    invalidate.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+
+  /** Waits until the epics have loaded and the action for this issue can be used, then opens the form. */
+  async function openCreate(label = "acme/widgets#43") {
+    await loaded();
+    await waitFor(() => expect(createButton(label)?.disabled).toBe(false));
+    fireEvent.click(createButton(label)!);
+    return createForm();
+  }
+
+  it("offers 'Create story' only on cards that are not linked to a story", async () => {
+    setup({ issues: [first, unlinked, linkedElsewhere], epics });
+    renderAt();
+    await loaded();
+    await waitFor(() => expect(createButton("acme/widgets#43")?.disabled).toBe(false));
+
+    expect(createButton("acme/widgets#43")!.textContent).toBe("Create story");
+    expect(cardOf("acme/widgets#43").contains(createButton("acme/widgets#43"))).toBe(true);
+    expect(createButton("acme/widgets#42")).toBeNull(); // linked to story 1
+    expect(createButton("acme/widgets#44")).toBeNull(); // has a story_id, even an unknown one
+    expect(within(cardOf("acme/widgets#42")).queryByText("Create story")).toBeNull();
+    expect(screen.queryByRole("form", { name: "Create story" })).toBeNull(); // nothing open until asked
+  });
+
+  it("opens an inline form: only open epics, the issue's title as name, an empty description", async () => {
+    setup({ issues: [first, unlinked], epics });
+    renderAt();
+    const form = await openCreate();
+
+    expect(form.closest(".card")).not.toBeNull(); // inline, on the card
+    const select = within(form).getByLabelText("Epic") as HTMLSelectElement;
+    const options = within(select).getAllByRole("option") as HTMLOptionElement[];
+    expect(options.map((o) => o.value)).toEqual(["", "1", "3"]); // finished and cancelled epics are left out
+    expect(options.slice(1).map((o) => o.textContent)).toEqual(["#1 Auth", "#3 Billing"]);
+    expect(select.value).toBe(""); // no epic chosen yet
+
+    const name = within(form).getByLabelText("Name") as HTMLInputElement;
+    expect(name.value).toBe("Slow search");
+    fireEvent.change(name, { target: { value: "Speed up search" } });
+    expect(name.value).toBe("Speed up search"); // editable
+    expect((within(form).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("keeps 'Create story' disabled until an epic is chosen", async () => {
+    const { w } = setup({ issues: [unlinked], epics });
+    renderAt();
+    const form = await openCreate();
+    const submit = within(form).getByRole("button", { name: "Create story" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "1" } });
+    expect(submit.disabled).toBe(false);
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "" } });
+    expect(submit.disabled).toBe(true);
+    expect(w.writes).toHaveLength(0);
+  });
+
+  it.each([
+    ["only finished and cancelled epics", [epic({ id: 2, state: "finished" }), epic({ id: 4, state: "cancelled" })]],
+    ["no epics at all", []],
+  ])("disables the action with a hint when the project has %s", async (_what, closed) => {
+    setup({ issues: [unlinked], epics: closed });
+    renderAt();
+    await loaded();
+    await waitFor(() => expect(cardOf("acme/widgets#43").textContent).toContain("no open epic; create one first"));
+    const button = createButton("acme/widgets#43")!;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(screen.queryByRole("form", { name: "Create story" })).toBeNull();
+  });
+
+  it("creates the story, links the issue to it, refreshes and goes to the new story", async () => {
+    const { w } = setup({ issues: [unlinked], epics });
+    const { invalidate } = renderAt();
+    const form = await openCreate();
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "3" } });
+    fireEvent.change(within(form).getByLabelText("Name"), { target: { value: "Speed up search" } });
+    fireEvent.change(within(form).getByLabelText("Description"), { target: { value: "Index the titles." } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" }));
+
+    await waitFor(() => expect(location()).toBe("/stories/10"));
+    expect(w.writes).toEqual([
+      { method: "POST", path: "/epics/3/stories", body: { name: "Speed up search", description: "Index the titles." } },
+      { method: "PATCH", path: "/issues/2", body: { story_id: 10 } },
+    ]);
+    expect(w.issues.find((i) => i.id === 2)!.story_id).toBe(10); // the story now lists the issue
+    expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(['["project",1]', '["epic",3]', '["story",10]']));
+  });
+
+  it("sends the title unchanged and an empty description when nothing is edited", async () => {
+    const { w } = setup({ issues: [unlinked], epics });
+    renderAt();
+    const form = await openCreate();
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "1" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" }));
+    await waitFor(() => expect(location()).toBe("/stories/10"));
+    expect(w.writes[0]).toEqual({ method: "POST", path: "/epics/1/stories", body: { name: "Slow search", description: "" } });
+  });
+
+  it("shows the server's message in the form when the epic is closed, and links nothing", async () => {
+    const { w } = setup({ issues: [unlinked], epics, refuseStory: () => problem(409, "conflict", "epic 1 is finished: cannot add stories") });
+    renderAt();
+    const form = await openCreate();
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "1" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" }));
+
+    expect((await within(form).findByRole("alert")).textContent).toBe("epic 1 is finished: cannot add stories");
+    expect(screen.getByRole("form", { name: "Create story" })).toBe(form); // still open
+    expect(w.writes).toEqual([{ method: "POST", path: "/epics/1/stories", body: { name: "Slow search", description: "" } }]); // no PATCH
+    expect(location()).toBe("/projects/1/issues");
+    expect(w.issues[0].story_id).toBeNull();
+  });
+
+  it("sends an empty name as typed and shows the server's 422 verbatim", async () => {
+    const untitled = issue({ ...unlinked, title: "" });
+    const { w } = setup({ issues: [untitled], epics, refuseStory: () => problem(422, "validation failed", "name: must not be empty") });
+    renderAt();
+    const form = await openCreate();
+    expect((within(form).getByLabelText("Name") as HTMLInputElement).value).toBe("");
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "3" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" })); // no client-side name check
+
+    expect((await within(form).findByRole("alert")).textContent).toBe("name: must not be empty");
+    expect(w.writes).toEqual([{ method: "POST", path: "/epics/3/stories", body: { name: "", description: "" } }]);
+    expect(location()).toBe("/projects/1/issues");
+  });
+
+  it("keeps the new story when linking fails: closes the form, shows the message and a link to the story on the card", async () => {
+    const { w, fetchMock } = setup({ issues: [unlinked], epics, refuse: (method) => (method === "PATCH" ? problem(500, "internal error", "database is on fire") : undefined) });
+    const { invalidate } = renderAt();
+    const form = await openCreate();
+    fireEvent.change(within(form).getByLabelText("Epic"), { target: { value: "1" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create story" }));
+
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Create story" })).toBeNull()); // closed: no resubmit
+    const card = cardOf("acme/widgets#43");
+    expect((await within(card).findByRole("alert")).textContent).toContain("database is on fire");
+    const storyLinks = within(card).getAllByRole("link").filter((a) => a.getAttribute("href") === "/stories/10");
+    expect(storyLinks).toHaveLength(1);
+
+    expect(location()).toBe("/projects/1/issues");
+    expect(w.writes.map((x) => `${x.method} ${x.path}`)).toEqual(["POST /epics/1/stories", "PATCH /issues/2"]); // one POST, nothing deleted
+    expect(fetchMock.mock.calls.some(([req]) => (req as Request).method === "DELETE")).toBe(false);
+    expect(w.issues[0].story_id).toBeNull();
+    expect(card.textContent).toContain("Not linked to a story");
+    expect(invalidatedKeys(invalidate)).toContain('["project",1]');
+  });
+
+  it("can be cancelled without sending anything", async () => {
+    const { w } = setup({ issues: [unlinked], epics });
+    renderAt();
+    const form = await openCreate();
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: "Create story" })).toBeNull();
+    expect(w.writes).toHaveLength(0);
+    expect(createButton("acme/widgets#43")).not.toBeNull(); // the action is back
+  });
+
+  it("never shows the create and edit forms on one card at once", async () => {
+    setup({ issues: [unlinked], epics });
+    renderAt();
+    await openCreate();
+    const edit = screen.queryByRole("button", { name: "Edit issue acme/widgets#43" });
+    if (edit) fireEvent.click(edit);
+    const open = () => screen.queryAllByRole("form").filter((f) => ["Create story", "Edit issue"].includes(f.getAttribute("aria-label") ?? ""));
+    expect(open()).toHaveLength(1);
+
+    // And the other way round: while editing, there is no create action.
+    const other = screen.queryByRole("form", { name: "Edit issue" });
+    if (!other) fireEvent.click(within(createForm()).getByRole("button", { name: "Cancel" }));
+    if (!screen.queryByRole("form", { name: "Edit issue" })) fireEvent.click(screen.getByRole("button", { name: "Edit issue acme/widgets#43" }));
+    expect(screen.getByRole("form", { name: "Edit issue" })).toBeTruthy();
+    expect(createButton("acme/widgets#43")).toBeNull();
+    expect(open()).toHaveLength(1);
   });
 });
