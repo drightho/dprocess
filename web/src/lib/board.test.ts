@@ -1,14 +1,17 @@
 import { epic, story } from "../test/fixtures";
 import {
   applyFilters,
+  capLane,
   epicProgress,
   filterOptions,
   groupByState,
   hasFilters,
+  LANE_LIMIT,
   NO_FILTERS,
   nonEmptyStates,
   openEpics,
   readFilters,
+  sortByRecentUpdate,
   STORY_STATES,
   writeFilters,
 } from "./board";
@@ -173,5 +176,118 @@ describe("openEpics", () => {
   it("returns nothing when every epic is closed, or there are none", () => {
     expect(openEpics([epic({ state: "finished" }), epic({ state: "cancelled" })])).toEqual([]);
     expect(openEpics([])).toEqual([]);
+  });
+});
+
+describe("LANE_LIMIT", () => {
+  it("is 5", () => {
+    expect(LANE_LIMIT).toBe(5);
+  });
+});
+
+describe("sortByRecentUpdate", () => {
+  const at = (day: number) => `2026-01-${String(day).padStart(2, "0")}T00:00:00Z`;
+
+  it("orders by updated_at, most recent first, whatever the input order", () => {
+    const input = [
+      story({ id: 1, updated_at: at(3) }),
+      story({ id: 2, updated_at: at(9) }),
+      story({ id: 3, updated_at: at(1) }),
+      story({ id: 4, updated_at: at(7) }),
+    ];
+    expect(ids(sortByRecentUpdate(input))).toEqual([2, 4, 1, 3]);
+    expect(ids(sortByRecentUpdate([...input].reverse()))).toEqual([2, 4, 1, 3]);
+  });
+
+  it("puts the higher id first when updated_at is equal", () => {
+    const input = [
+      story({ id: 4, updated_at: at(5) }),
+      story({ id: 9, updated_at: at(5) }),
+      story({ id: 1, updated_at: at(8) }),
+      story({ id: 6, updated_at: at(5) }),
+    ];
+    expect(ids(sortByRecentUpdate(input))).toEqual([1, 9, 6, 4]);
+    expect(ids(sortByRecentUpdate([...input].reverse()))).toEqual([1, 9, 6, 4]);
+  });
+
+  it("orders stories with identical timestamps by id, descending", () => {
+    const input = [3, 1, 5, 2, 4].map((id) => story({ id }));
+    expect(ids(sortByRecentUpdate(input))).toEqual([5, 4, 3, 2, 1]);
+  });
+
+  it("compares timestamps as instants, not as text", () => {
+    const input = [
+      story({ id: 1, updated_at: "2026-01-02T00:00:00.000Z" }),
+      story({ id: 2, updated_at: "2026-01-02T00:00:01Z" }),
+      story({ id: 3, updated_at: "2026-01-01T23:59:59.500Z" }),
+    ];
+    expect(ids(sortByRecentUpdate(input))).toEqual([2, 1, 3]);
+  });
+
+  it("returns a fresh array and leaves its input alone", () => {
+    const input = [story({ id: 1, updated_at: at(1) }), story({ id: 2, updated_at: at(2) })];
+    const before = [...input];
+    const out = sortByRecentUpdate(input);
+    expect(out).not.toBe(input);
+    expect(input).toEqual(before);
+    expect(ids(input)).toEqual([1, 2]);
+    out.reverse();
+    expect(ids(input)).toEqual([1, 2]);
+  });
+
+  it("returns a fresh array for empty and one-story input", () => {
+    const empty: ReturnType<typeof story>[] = [];
+    expect(sortByRecentUpdate(empty)).toEqual([]);
+    expect(sortByRecentUpdate(empty)).not.toBe(empty);
+    const one = [story({ id: 7 })];
+    expect(ids(sortByRecentUpdate(one))).toEqual([7]);
+    expect(sortByRecentUpdate(one)).not.toBe(one);
+  });
+});
+
+describe("capLane", () => {
+  const lane = (n: number) => Array.from({ length: n }, (_, i) => story({ id: n - i }));
+
+  it("keeps the first LANE_LIMIT stories of a longer lane while capped", () => {
+    const seven = lane(LANE_LIMIT + 2);
+    expect(ids(capLane(seven, false))).toEqual(ids(seven).slice(0, LANE_LIMIT));
+    expect(capLane(seven, false)).toHaveLength(LANE_LIMIT);
+  });
+
+  it("keeps every story, in the same order, when expanded", () => {
+    const seven = lane(LANE_LIMIT + 2);
+    expect(ids(capLane(seven, true))).toEqual(ids(seven));
+  });
+
+  it("keeps a lane of LANE_LIMIT or fewer whole, expanded or not", () => {
+    for (const n of [0, 1, LANE_LIMIT - 1, LANE_LIMIT]) {
+      const l = lane(n);
+      expect(ids(capLane(l, false))).toEqual(ids(l));
+      expect(ids(capLane(l, true))).toEqual(ids(l));
+    }
+  });
+
+  it("caps a lane of exactly LANE_LIMIT + 1", () => {
+    const six = lane(LANE_LIMIT + 1);
+    expect(ids(capLane(six, false))).toEqual(ids(six).slice(0, LANE_LIMIT));
+  });
+
+  it("does not reorder: it keeps the order it is given", () => {
+    const shuffled = [3, 8, 1, 6, 2, 7, 5].map((id) => story({ id }));
+    expect(ids(capLane(shuffled, false))).toEqual([3, 8, 1, 6, 2]);
+    expect(ids(capLane(shuffled, true))).toEqual([3, 8, 1, 6, 2, 7, 5]);
+  });
+
+  it("returns a fresh array and leaves its input alone", () => {
+    for (const n of [3, LANE_LIMIT + 2]) {
+      for (const expanded of [false, true]) {
+        const l = lane(n);
+        const before = ids(l);
+        const out = capLane(l, expanded);
+        expect(out).not.toBe(l);
+        out.reverse();
+        expect(ids(l)).toEqual(before);
+      }
+    }
   });
 });

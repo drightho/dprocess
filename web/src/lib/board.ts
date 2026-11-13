@@ -126,3 +126,24 @@ export function epicProgress(
   }
   return { total, finished, cancelled };
 }
+
+/** The most story cards a board lane shows until it is expanded. */
+export const LANE_LIMIT = 5;
+
+/**
+ * A lane's stories, most recently updated first (a higher id first when
+ * updated_at is equal). Returns a fresh array; the input is not changed.
+ */
+// TODO story 94
+export function sortByRecentUpdate<T extends { id: number; updated_at: string }>(_stories: readonly T[]): T[] {
+  throw new Error("not implemented");
+}
+
+/**
+ * The cards a lane shows: its first LANE_LIMIT stories while capped, all of
+ * them when expanded. Expects the stories already sorted; returns a fresh array.
+ */
+// TODO story 94
+export function capLane<T>(_stories: readonly T[], _expanded: boolean): T[] {
+  throw new Error("not implemented");
+}
