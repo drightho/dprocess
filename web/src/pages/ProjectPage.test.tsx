@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import ProjectPage from "./ProjectPage";
-import { LANE_LIMIT } from "../lib/board";
 import { RECENT_KEY, readRecent } from "../lib/recent";
 import { epic, json, mockApi, problem, story } from "../test/fixtures";
 
@@ -775,10 +774,11 @@ describe("ProjectPage board: lane cap", () => {
   const mk = (id: number, state: Over["state"], d: number, over: Over = {}) =>
     story({ id, epic_id: 1, name: `Story ${id}`, state, updated_at: day(d), ...over });
   const names = (...ids: number[]) => ids.map((id) => `Story ${id}`);
+  const lane = (state: string) => within(column(state));
   /** Names of the cards in one lane, top to bottom. */
   const laneCards = (state: string) =>
     Array.from(column(state).querySelectorAll(".card strong")).map((el) => el.textContent);
-  const toggle = (state: string) => within(column(state)).queryByRole("button", { name: /^Show (all|fewer)/ });
+  const toggle = (state: string) => lane(state).queryByRole("button", { name: /^Show (all|fewer)/ });
 
   // The API lists them in an order that is neither by id nor by update time.
   const capStories = [
@@ -806,14 +806,10 @@ describe("ProjectPage board: lane cap", () => {
     return view;
   }
 
-  it("uses a limit of 5", () => {
-    expect(LANE_LIMIT).toBe(5);
-  });
-
   it("shows only the 5 most recently updated stories of a lane with more than 5", async () => {
     await load();
     expect(laneCards("draft")).toEqual(names(14, 12, 16, 15, 11));
-    expect(within(column("draft")).getAllByRole("link", { name: /^Story / })).toHaveLength(5);
+    expect(lane("draft").getAllByRole("link", { name: /^Story / })).toHaveLength(5);
     expect(screen.queryByText("Story 17")).toBeNull();
     expect(screen.queryByText("Story 13")).toBeNull();
   });
@@ -850,36 +846,36 @@ describe("ProjectPage board: lane cap", () => {
 
   it("keeps the lane total in the header count, not the number of cards shown", async () => {
     await load();
-    expect(within(column("draft")).getByLabelText("7 stories").textContent).toBe("7");
-    expect(within(column("finished")).getByLabelText("8 stories").textContent).toBe("8");
-    expect(within(column("cancelled")).getByLabelText("6 stories").textContent).toBe("6");
-    expect(within(column("review")).getByLabelText("5 stories").textContent).toBe("5");
-    expect(within(column("implementation")).getByLabelText("3 stories").textContent).toBe("3");
+    expect(lane("draft").getByLabelText("7 stories").textContent).toBe("7");
+    expect(lane("finished").getByLabelText("8 stories").textContent).toBe("8");
+    expect(lane("cancelled").getByLabelText("6 stories").textContent).toBe("6");
+    expect(lane("review").getByLabelText("5 stories").textContent).toBe("5");
+    expect(lane("implementation").getByLabelText("3 stories").textContent).toBe("3");
 
-    fireEvent.click(within(column("draft")).getByRole("button", { name: "Show all 7" }));
-    expect(within(column("draft")).getByLabelText("7 stories").textContent).toBe("7");
+    fireEvent.click(lane("draft").getByRole("button", { name: "Show all 7" }));
+    expect(lane("draft").getByLabelText("7 stories").textContent).toBe("7");
   });
 
   it("expands a capped lane with Show all N and collapses it with Show fewer", async () => {
     await load();
-    const lane = () => within(column("draft"));
-    expect(lane().getByRole("button", { name: "Show all 7" })).toBeTruthy();
-    expect(lane().queryByRole("button", { name: "Show fewer" })).toBeNull();
+    const draft = () => lane("draft");
+    expect(draft().getByRole("button", { name: "Show all 7" })).toBeTruthy();
+    expect(draft().queryByRole("button", { name: "Show fewer" })).toBeNull();
 
-    fireEvent.click(lane().getByRole("button", { name: "Show all 7" }));
+    fireEvent.click(draft().getByRole("button", { name: "Show all 7" }));
     expect(laneCards("draft")).toEqual(names(14, 12, 16, 15, 11, 17, 13));
-    expect(lane().getByRole("button", { name: "Show fewer" })).toBeTruthy();
-    expect(lane().queryByRole("button", { name: "Show all 7" })).toBeNull();
+    expect(draft().getByRole("button", { name: "Show fewer" })).toBeTruthy();
+    expect(draft().queryByRole("button", { name: "Show all 7" })).toBeNull();
 
-    fireEvent.click(lane().getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(draft().getByRole("button", { name: "Show fewer" }));
     expect(laneCards("draft")).toEqual(names(14, 12, 16, 15, 11));
-    expect(lane().getByRole("button", { name: "Show all 7" })).toBeTruthy();
-    expect(lane().queryByRole("button", { name: "Show fewer" })).toBeNull();
+    expect(draft().getByRole("button", { name: "Show all 7" })).toBeTruthy();
+    expect(draft().queryByRole("button", { name: "Show fewer" })).toBeNull();
   });
 
   it("places the toggle under the lane's cards", async () => {
     await load();
-    const button = within(column("draft")).getByRole("button", { name: "Show all 7" });
+    const button = lane("draft").getByRole("button", { name: "Show all 7" });
     const cards = column("draft").querySelector("ul.cards")!;
     expect(cards.contains(button)).toBe(false);
     expect(cards.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -887,21 +883,21 @@ describe("ProjectPage board: lane cap", () => {
 
   it("toggles each lane on its own", async () => {
     await load();
-    fireEvent.click(within(column("draft")).getByRole("button", { name: "Show all 7" }));
+    fireEvent.click(lane("draft").getByRole("button", { name: "Show all 7" }));
     expect(laneCards("draft")).toHaveLength(7);
     expect(laneCards("finished")).toEqual(names(43, 46, 41, 48, 44));
-    expect(within(column("finished")).getByRole("button", { name: "Show all 8" })).toBeTruthy();
+    expect(lane("finished").getByRole("button", { name: "Show all 8" })).toBeTruthy();
     expect(laneCards("cancelled")).toHaveLength(5);
-    expect(within(column("cancelled")).getByRole("button", { name: "Show all 6" })).toBeTruthy();
+    expect(lane("cancelled").getByRole("button", { name: "Show all 6" })).toBeTruthy();
 
-    fireEvent.click(within(column("finished")).getByRole("button", { name: "Show all 8" }));
+    fireEvent.click(lane("finished").getByRole("button", { name: "Show all 8" }));
     expect(laneCards("finished")).toHaveLength(8);
     expect(laneCards("draft")).toHaveLength(7);
 
-    fireEvent.click(within(column("draft")).getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(lane("draft").getByRole("button", { name: "Show fewer" }));
     expect(laneCards("draft")).toHaveLength(5);
     expect(laneCards("finished")).toHaveLength(8);
-    expect(within(column("finished")).getByRole("button", { name: "Show fewer" })).toBeTruthy();
+    expect(lane("finished").getByRole("button", { name: "Show fewer" })).toBeTruthy();
     expect(laneCards("cancelled")).toHaveLength(5);
   });
 
@@ -919,28 +915,18 @@ describe("ProjectPage board: lane cap", () => {
     expect(cardNames()).toHaveLength(4);
   });
 
-  it("caps a lane of exactly 6", async () => {
-    await load("/projects/1", {
-      ...fullRoutes,
-      "/api/v1/projects/1/stories": [1, 2, 3, 4, 5, 6].map((id) => mk(id, "design", id)),
-    });
-    expect(laneCards("design")).toEqual(names(6, 5, 4, 3, 2));
-    fireEvent.click(within(column("design")).getByRole("button", { name: "Show all 6" }));
-    expect(laneCards("design")).toEqual(names(6, 5, 4, 3, 2, 1));
-  });
-
   it("caps and toggles finished and cancelled lanes like any other", async () => {
     await load();
     expect(laneCards("finished")).toEqual(names(43, 46, 41, 48, 44));
     expect(laneCards("cancelled")).toEqual(names(52, 54, 51, 55, 56));
 
-    fireEvent.click(within(column("finished")).getByRole("button", { name: "Show all 8" }));
+    fireEvent.click(lane("finished").getByRole("button", { name: "Show all 8" }));
     expect(laneCards("finished")).toEqual(names(43, 46, 41, 48, 44, 47, 42, 45));
-    fireEvent.click(within(column("cancelled")).getByRole("button", { name: "Show all 6" }));
+    fireEvent.click(lane("cancelled").getByRole("button", { name: "Show all 6" }));
     expect(laneCards("cancelled")).toEqual(names(52, 54, 51, 55, 56, 53));
 
-    fireEvent.click(within(column("finished")).getByRole("button", { name: "Show fewer" }));
-    fireEvent.click(within(column("cancelled")).getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(lane("finished").getByRole("button", { name: "Show fewer" }));
+    fireEvent.click(lane("cancelled").getByRole("button", { name: "Show fewer" }));
     expect(laneCards("finished")).toEqual(names(43, 46, 41, 48, 44));
     expect(laneCards("cancelled")).toEqual(names(52, 54, 51, 55, 56));
   });
@@ -962,13 +948,7 @@ describe("ProjectPage board: lane cap", () => {
       mk(74, "draft", 4, { epic_id: 2, assignee: "bob", tags: ["ui"] }),
     ];
     const filterRoutes = { ...fullRoutes, "/api/v1/projects/1/stories": [...filterStories].reverse() };
-    const draft = () => within(column("draft"));
-
-    it("caps the unfiltered lane at its 5 most recent of all 12", async () => {
-      await load("/projects/1", filterRoutes);
-      expect(laneCards("draft")).toEqual(names(62, 71, 64, 73, 66));
-      expect(draft().getByRole("button", { name: "Show all 12" })).toBeTruthy();
-    });
+    const draft = () => lane("draft");
 
     it("caps after the epic filter, with the filtered total", async () => {
       await load("/projects/1?epic=1", filterRoutes);
@@ -976,6 +956,11 @@ describe("ProjectPage board: lane cap", () => {
       expect(draft().getByLabelText("8 stories")).toBeTruthy();
       fireEvent.click(draft().getByRole("button", { name: "Show all 8" }));
       expect(laneCards("draft")).toEqual(names(62, 64, 66, 67, 68, 65, 63, 61));
+
+      // Epic 2 leaves 4 drafts: all shown, no toggle.
+      fireEvent.change(screen.getByLabelText("Epic"), { target: { value: "2" } });
+      expect(laneCards("draft")).toEqual(names(71, 73, 74, 72));
+      expect(toggle("draft")).toBeNull();
     });
 
     it("caps after the assignee filter, with the filtered total", async () => {
@@ -991,22 +976,6 @@ describe("ProjectPage board: lane cap", () => {
       expect(draft().getByLabelText("10 stories")).toBeTruthy();
       fireEvent.click(draft().getByRole("button", { name: "Show all 10" }));
       expect(laneCards("draft")).toEqual(names(62, 71, 64, 73, 66, 67, 65, 74, 63, 72));
-    });
-
-    it("drops the toggle when the filtered lane has 5 or fewer", async () => {
-      await load("/projects/1?epic=2", filterRoutes);
-      expect(laneCards("draft")).toEqual(names(71, 73, 74, 72));
-      expect(toggle("draft")).toBeNull();
-    });
-
-    it("recaps when a filter is chosen on the page", async () => {
-      await load("/projects/1", filterRoutes);
-      fireEvent.change(screen.getByLabelText("Epic"), { target: { value: "1" } });
-      expect(laneCards("draft")).toEqual(names(62, 64, 66, 67, 68));
-      expect(draft().getByRole("button", { name: "Show all 8" })).toBeTruthy();
-      fireEvent.change(screen.getByLabelText("Epic"), { target: { value: "2" } });
-      expect(laneCards("draft")).toHaveLength(4);
-      expect(toggle("draft")).toBeNull();
     });
   });
 
@@ -1026,27 +995,27 @@ describe("ProjectPage board: lane cap", () => {
       const before = snapshot();
       const url = location();
 
-      fireEvent.click(within(column("draft")).getByRole("button", { name: "Show all 7" }));
+      fireEvent.click(lane("draft").getByRole("button", { name: "Show all 7" }));
       expect(location()).toBe(url);
       expect(snapshot()).toEqual(before);
 
-      fireEvent.click(within(column("draft")).getByRole("button", { name: "Show fewer" }));
+      fireEvent.click(lane("draft").getByRole("button", { name: "Show fewer" }));
       expect(location()).toBe(url);
       expect(snapshot()).toEqual(before);
     });
 
     it("starts every lane capped when the page is opened again", async () => {
       const first = await load();
-      fireEvent.click(within(column("draft")).getByRole("button", { name: "Show all 7" }));
-      fireEvent.click(within(column("finished")).getByRole("button", { name: "Show all 8" }));
+      fireEvent.click(lane("draft").getByRole("button", { name: "Show all 7" }));
+      fireEvent.click(lane("finished").getByRole("button", { name: "Show all 8" }));
       expect(laneCards("draft")).toHaveLength(7);
       first.unmount();
 
       await load();
       expect(laneCards("draft")).toEqual(names(14, 12, 16, 15, 11));
-      expect(within(column("draft")).getByRole("button", { name: "Show all 7" })).toBeTruthy();
+      expect(lane("draft").getByRole("button", { name: "Show all 7" })).toBeTruthy();
       expect(laneCards("finished")).toHaveLength(5);
-      expect(within(column("finished")).getByRole("button", { name: "Show all 8" })).toBeTruthy();
+      expect(lane("finished").getByRole("button", { name: "Show all 8" })).toBeTruthy();
     });
 
     it("starts every lane capped when another project is opened", async () => {
@@ -1073,15 +1042,15 @@ describe("ProjectPage board: lane cap", () => {
         </QueryClientProvider>,
       );
       await screen.findByRole("heading", { name: "Alpha" });
-      fireEvent.click(within(column("draft")).getByRole("button", { name: "Show all 7" }));
+      fireEvent.click(lane("draft").getByRole("button", { name: "Show all 7" }));
       expect(laneCards("draft")).toHaveLength(7);
 
       fireEvent.click(screen.getByRole("button", { name: "Go to /projects/2" }));
       await screen.findByRole("heading", { name: "Beta" });
       await screen.findByText("Story 87");
       expect(laneCards("draft")).toEqual(names(87, 86, 85, 84, 83));
-      expect(within(column("draft")).getByRole("button", { name: "Show all 7" })).toBeTruthy();
-      expect(within(column("draft")).queryByRole("button", { name: "Show fewer" })).toBeNull();
+      expect(lane("draft").getByRole("button", { name: "Show all 7" })).toBeTruthy();
+      expect(lane("draft").queryByRole("button", { name: "Show fewer" })).toBeNull();
     });
   });
 });

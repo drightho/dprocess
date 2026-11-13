@@ -208,34 +208,32 @@ describe("sortByRecentUpdate", () => {
     ];
     expect(ids(sortByRecentUpdate(input))).toEqual([1, 9, 6, 4]);
     expect(ids(sortByRecentUpdate([...input].reverse()))).toEqual([1, 9, 6, 4]);
-  });
-
-  it("orders stories with identical timestamps by id, descending", () => {
-    const input = [3, 1, 5, 2, 4].map((id) => story({ id }));
-    expect(ids(sortByRecentUpdate(input))).toEqual([5, 4, 3, 2, 1]);
+    // All identical: by id, descending.
+    expect(ids(sortByRecentUpdate([3, 1, 5, 2, 4].map((id) => story({ id }))))).toEqual([5, 4, 3, 2, 1]);
   });
 
   it("compares timestamps as instants, not as text", () => {
-    const input = [
-      story({ id: 1, updated_at: "2026-01-02T00:00:00.000Z" }),
-      story({ id: 2, updated_at: "2026-01-02T00:00:01Z" }),
-      story({ id: 3, updated_at: "2026-01-01T23:59:59.500Z" }),
+    // Text order would put "…00Z" after "…00.500Z"; as instants .500 is later.
+    const later = [
+      story({ id: 1, updated_at: "2026-01-02T00:00:00Z" }),
+      story({ id: 2, updated_at: "2026-01-02T00:00:00.500Z" }),
     ];
-    expect(ids(sortByRecentUpdate(input))).toEqual([2, 1, 3]);
+    // The same instant written two ways is a tie, so the higher id comes first.
+    const same = [
+      story({ id: 3, updated_at: "2026-01-02T00:00:00Z" }),
+      story({ id: 4, updated_at: "2026-01-02T00:00:00.000Z" }),
+    ];
+    for (const input of [later, [...later].reverse()]) expect(ids(sortByRecentUpdate(input))).toEqual([2, 1]);
+    for (const input of [same, [...same].reverse()]) expect(ids(sortByRecentUpdate(input))).toEqual([4, 3]);
   });
 
   it("returns a fresh array and leaves its input alone", () => {
     const input = [story({ id: 1, updated_at: at(1) }), story({ id: 2, updated_at: at(2) })];
-    const before = [...input];
     const out = sortByRecentUpdate(input);
     expect(out).not.toBe(input);
-    expect(input).toEqual(before);
-    expect(ids(input)).toEqual([1, 2]);
     out.reverse();
     expect(ids(input)).toEqual([1, 2]);
-  });
-
-  it("returns a fresh array for empty and one-story input", () => {
+    // Also for empty and one-story input.
     const empty: ReturnType<typeof story>[] = [];
     expect(sortByRecentUpdate(empty)).toEqual([]);
     expect(sortByRecentUpdate(empty)).not.toBe(empty);
