@@ -3,7 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, unwrap, type Schemas } from "../api/client";
 import IssueForm from "../components/IssueForm";
+import IssueStoryForm from "../components/IssueStoryForm";
 import NotFoundNotice from "../components/NotFoundNotice";
+import { openEpics } from "../lib/board";
 import { formatTime } from "../lib/format";
 import { githubLabel } from "../lib/github";
 import RemoteStatusBadge from "../components/RemoteStatusBadge";
@@ -25,11 +27,16 @@ export default function IssuesPage() {
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
+  // At most one card has a form open, and it is either the Edit form or the Create story form.
+  const [open, setOpen] = useState<{ issueId: number; form: "edit" | "create" } | null>(null);
+  // Stories created from an issue whose link then failed, by issue: the story was kept.
+  const [linkFailures, setLinkFailures] = useState<Record<number, { storyId: number; message: string }>>({});
 
   const project = useQuery({ queryKey: ["project", id], enabled, queryFn: () => unwrap(api.GET("/projects/{id}", { params: { path: { id: id! } } })) });
   const issues = useQuery({ queryKey: ["project", id, "issues"], enabled, queryFn: () => unwrap(api.GET("/projects/{id}/issues", { params: { path: { id: id! } } })) });
   const stories = useQuery({ queryKey: ["project", id, "stories"], enabled, queryFn: () => unwrap(api.GET("/projects/{id}/stories", { params: { path: { id: id! } } })) });
+  // Only for creating a story from an issue; the page does not wait for it.
+  const epics = useQuery({ queryKey: ["project", id, "epics"], enabled, queryFn: () => unwrap(api.GET("/projects/{id}/epics", { params: { path: { id: id! } } })) });
 
   const remove = useMutation({
     mutationFn: (issueId: number) => unwrap(api.DELETE("/issues/{id}", { params: { path: { id: issueId } } })),
@@ -65,6 +72,11 @@ export default function IssuesPage() {
   if (!project.data || !issues.data || !stories.data) return <p>Loading...</p>;
 
   const storyById = new Map(stories.data.map((s) => [s.id, s]));
+  const pickable = epics.data ? openEpics(epics.data) : null;
+  const openForm = (issueId: number, form: "edit" | "create") => {
+    setLinkFailures(({ [issueId]: _dropped, ...rest }) => rest);
+    setOpen({ issueId, form });
+  };
   const filter = readStoryFilter(params.get("story"), new Set(storyById.keys()));
   const shown: Issue[] = issues.data
     .filter((i) => (filter === "" ? true : filter === "none" ? i.story_id === null : i.story_id === Number(filter)))
@@ -125,9 +137,9 @@ export default function IssuesPage() {
       ) : (
         <ul className="cards">
           {shown.map((i) =>
-            editing === i.id ? (
+            open?.issueId === i.id && open.form === "edit" ? (
               <li key={i.id} className="card">
-                <IssueForm projectId={id} stories={stories.data} issue={i} onDone={() => setEditing(null)} onCancel={() => setEditing(null)} />
+                <IssueForm projectId={id} stories={stories.data} issue={i} onDone={() => setOpen(null)} onCancel={() => setOpen(null)} />
               </li>
             ) : (
               <li key={i.id} className="card">
@@ -153,14 +165,47 @@ export default function IssuesPage() {
                   {" · added "}
                   {formatTime(i.created_at)}
                 </span>
-                <span className="actions">
-                  <button type="button" aria-label={`Edit issue ${githubLabel(i)}`} onClick={() => setEditing(i.id)}>
-                    Edit
-                  </button>
-                  <button type="button" className="danger" aria-label={`Remove issue ${githubLabel(i)}`} disabled={remove.isPending} onClick={() => remove.mutate(i.id)}>
-                    Remove
-                  </button>
-                </span>
+                {linkFailures[i.id] && (
+                  <span className="meta">
+                    <span role="alert" className="error">
+                      {linkFailures[i.id].message}
+                    </span>{" "}
+                    <Link to={`/stories/${linkFailures[i.id].storyId}`}>Story #{linkFailures[i.id].storyId}</Link> was created but not linked to this issue.
+                  </span>
+                )}
+                {open?.issueId === i.id && open.form === "create" ? (
+                  <IssueStoryForm
+                    projectId={id}
+                    issue={i}
+                    epics={pickable ?? []}
+                    onCancel={() => setOpen(null)}
+                    onLinkFailed={(story, message) => {
+                      setOpen(null);
+                      setLinkFailures((f) => ({ ...f, [i.id]: { storyId: story.id, message } }));
+                    }}
+                  />
+                ) : (
+                  <span className="actions">
+                    <button type="button" aria-label={`Edit issue ${githubLabel(i)}`} onClick={() => openForm(i.id, "edit")}>
+                      Edit
+                    </button>
+                    {i.story_id === null && (
+                      <button
+                        type="button"
+                        aria-label={`Create story from issue ${githubLabel(i)}`}
+                        disabled={pickable === null || pickable.length === 0}
+                        onClick={() => openForm(i.id, "create")}
+                      >
+                        Create story
+                      </button>
+                    )}
+                    <button type="button" className="danger" aria-label={`Remove issue ${githubLabel(i)}`} disabled={remove.isPending} onClick={() => remove.mutate(i.id)}>
+                      Remove
+                    </button>
+                    {i.story_id === null && pickable !== null && pickable.length === 0 && <span className="meta">no open epic; create one first</span>}
+                    {i.story_id === null && epics.isError && <span className="meta">{epics.error.message}</span>}
+                  </span>
+                )}
               </li>
             ),
           )}

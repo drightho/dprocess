@@ -20,6 +20,11 @@ export const STORY_STATES: readonly StoryState[] = [
 /** Finished and cancelled stories are frozen: the server refuses to modify them. */
 export const isTerminal = (s: { state: string }): boolean => s.state === "finished" || s.state === "cancelled";
 
+/** The epics that can still get stories (not finished or cancelled), in the order given. A convenience: the server decides. */
+export function openEpics<T extends { state: string }>(epics: readonly T[]): T[] {
+  return epics.filter((e) => !isTerminal(e));
+}
+
 /** Warning the server attaches to stories estimated above 400 lines. */
 export const WARN_LOC = "estimate_exceeds_400_loc";
 
