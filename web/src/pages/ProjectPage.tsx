@@ -142,7 +142,8 @@ export default function ProjectPage() {
               </button>
             </p>
           ) : (
-            <StoryBoard stories={visible} epics={epics.data} />
+            // Keyed by project so opening another project starts every lane capped.
+            <StoryBoard key={id} stories={visible} epics={epics.data} />
           )}
         </>
       )}
