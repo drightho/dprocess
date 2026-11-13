@@ -18,7 +18,7 @@ type Server struct {
 	Store *store.Store
 	// UI, if set, is served at / with SPA fallback to index.html.
 	UI fs.FS
-	// GitHub is the optional read-only status sync; nil means disabled. Once
+	// GitHub is the optional GitHub sync (status refresh and issue import); nil means disabled. Once
 	// the server is running, read it through GitHubSyncer (the API can change it).
 	GitHub *github.Syncer
 

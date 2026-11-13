@@ -76,7 +76,7 @@ export default function IssuesPage() {
         <Link to={`/projects/${id}`}>&larr; {project.data.name}</Link>
       </p>
       <h1>Issues</h1>
-      <p className="meta">References to GitHub issues. DProcess stores the link; it only reads GitHub (status badges) when the server's optional sync is on.</p>
+      <p className="meta">References to GitHub issues. DProcess stores the link; it contacts GitHub (status badges, issue import) only when the server's optional sync is on, and its only write there is assigning imported issues to the token owner.</p>
 
       {adding ? (
         <IssueForm projectId={id} stories={stories.data} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
