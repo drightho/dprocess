@@ -125,6 +125,7 @@ type Syncer struct {
 	mu      sync.Mutex
 	lastRun *string
 	lastErr string
+	owner   string // the token owner's login, once looked up (guarded by mu)
 }
 
 // Status reports the last run. A nil Syncer means the sync is disabled.
