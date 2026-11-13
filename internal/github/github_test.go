@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,9 +38,14 @@ func link(t *testing.T, st *store.Store) {
 }
 
 func TestSyncCachesStatusReadOnly(t *testing.T) {
-	var methods, auth atomic.Value
+	var methods, auth atomic.Value // every method seen / the last Authorization
+	var mu sync.Mutex
+	var all []string
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods.Store(r.Method)
+		mu.Lock()
+		all = append(all, r.Method+" "+r.URL.Path)
+		mu.Unlock()
 		auth.Store(r.Header.Get("Authorization"))
 		switch r.URL.Path {
 		case "/repos/acme/w/pulls/7":
@@ -63,8 +69,20 @@ func TestSyncCachesStatusReadOnly(t *testing.T) {
 	if got := st.RemoteStatus(store.KindIssue, "acme/w", 3); got.State != "open" || got.Title != "A bug" {
 		t.Errorf("issue: %+v", got)
 	}
-	if methods.Load() != "GET" || auth.Load() != "Bearer tok" {
-		t.Errorf("method %v auth %v", methods.Load(), auth.Load())
+	// Story 88: the status refresh stays read-only (the project here links no
+	// repository, so no import and no assignment runs).
+	mu.Lock()
+	for _, m := range all {
+		if !strings.HasPrefix(m, "GET ") {
+			t.Errorf("the status refresh must only GET, saw %q", m)
+		}
+	}
+	if len(all) == 0 {
+		t.Error("no request seen")
+	}
+	mu.Unlock()
+	if auth.Load() != "Bearer tok" {
+		t.Errorf("auth %v", auth.Load())
 	}
 	if s := y.Status(); !s.Enabled || s.LastRunAt == nil || s.LastError != "" {
 		t.Errorf("status: %+v", s)

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -49,16 +50,40 @@ type ghRepo struct {
 	nextLink string            // != "": replaces the rel="next" URL
 	// onList runs before a list request is answered.
 	onList func(page int, r *http.Request)
+	// assignFail makes the assignment POST of an issue number fail (story 88).
+	assignFail map[int64]*ghFail
+	// apiURL != "": the list entries carry "url", "repository_url" and
+	// "assignees_url" pointing there (a host the token must never reach).
+	apiURL string
 }
+
+// ghFail describes how the fake answers a request wrongly (story 88).
+type ghFail struct {
+	Status int               // != 0: answer with this status
+	Header map[string]string // headers of that answer
+	Body   string            // != "": raw body of a 2xx answer (or of the failure)
+	Drop   bool              // close the connection without an answer
+	// Assignees != nil: the assignees the 2xx answer reports instead of the
+	// requested login. An empty list is GitHub silently ignoring the assignee;
+	// a non-empty list is stored as the assignment.
+	Assignees *[]string
+}
+
+func logins(l ...string) *[]string { return &l }
 
 type ghReq struct {
 	Method, Path, Query, Auth string
 	List                      bool   // a list request (not a single item)
 	Repo                      string // owner/repo
 	Page                      int    // list requests only
+	User                      bool   // GET /user (story 88)
+	Assign                    bool   // POST .../issues/{n}/assignees (story 88)
+	Number                    int64  // assignment requests only
+	Body                      string // assignment requests only
 }
 
-// fakeGitHub imitates the two endpoints the sync reads. Like GitHub, the list
+// fakeGitHub imitates the endpoints the sync uses: the issue list and single
+// items (reads), GET /user and the assignment POST (story 88). Like GitHub, the list
 // filters and orders only when asked: the default is open issues with any
 // assignee, newest first, 30 per page, pull requests included.
 type fakeGitHub struct {
@@ -69,22 +94,32 @@ type fakeGitHub struct {
 	maxPerPage int // upper limit for per_page (GitHub: 100)
 	itemStatus int // != 0: every single-item request answers with it
 	reqs       []ghReq
+	// Story 88: the token owner's login, how GET /user fails (nil = works) and
+	// a hook run before an assignment is answered.
+	userLogin string
+	userFail  *ghFail
+	onAssign  func(repo string, number int64, r *http.Request)
 }
 
 var (
 	listPath = regexp.MustCompile(`^/repos/([^/]+/[^/]+)/issues$`)
 	itemPath = regexp.MustCompile(`^/repos/([^/]+/[^/]+)/(issues|pulls)/(\d+)$`)
+	// assignPath is the one write the sync may send (story 88).
+	assignPath = regexp.MustCompile(`^/repos/([^/]+/[^/]+)/issues/(\d+)/assignees$`)
 )
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
 	t.Helper()
-	f := &fakeGitHub{t: t, repos: map[string]*ghRepo{}, maxPerPage: 100}
+	f := &fakeGitHub{t: t, repos: map[string]*ghRepo{}, maxPerPage: 100, userLogin: "bot"}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(func() {
 		f.Close()
 		for _, r := range f.requests() {
-			if r.Method != http.MethodGet {
-				t.Errorf("the sync must only read GitHub: got %s %s", r.Method, r.Path)
+			if r.Method != http.MethodGet && !r.Assign {
+				t.Errorf("the only write the sync may send is the assignment POST: got %s %s", r.Method, r.Path)
+			}
+			if r.Assign && r.Method != http.MethodPost {
+				t.Errorf("an assignment must be a POST, got %s %s", r.Method, r.Path)
 			}
 		}
 	})
@@ -102,10 +137,27 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	} else if m := itemPath.FindStringSubmatch(r.URL.Path); m != nil {
 		req.Repo = m[1]
 	}
+	am := assignPath.FindStringSubmatch(r.URL.Path)
+	if am != nil {
+		req.Repo = am[1]
+		req.Number, _ = strconv.ParseInt(am[2], 10, 64)
+		req.Assign = true
+		b, _ := io.ReadAll(r.Body)
+		req.Body = string(b)
+	}
+	req.User = r.URL.Path == "/user"
 	f.mu.Lock()
 	f.reqs = append(f.reqs, req)
 	f.mu.Unlock()
-	if r.Method != http.MethodGet {
+	if am != nil && r.Method == http.MethodPost {
+		f.serveAssign(w, r, req)
+		return
+	}
+	if req.User && r.Method == http.MethodGet {
+		f.serveUser(w)
+		return
+	}
+	if r.Method != http.MethodGet || am != nil {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -223,6 +275,11 @@ func (f *fakeGitHub) serveList(w http.ResponseWriter, r *http.Request, req ghReq
 		if is.HTMLURL != "" {
 			e["html_url"] = is.HTMLURL
 		}
+		if repo.apiURL != "" {
+			e["url"] = fmt.Sprintf("%s/repos/%s/issues/%d", repo.apiURL, req.Repo, is.Number)
+			e["repository_url"] = fmt.Sprintf("%s/repos/%s", repo.apiURL, req.Repo)
+			e["assignees_url"] = fmt.Sprintf("%s/repos/%s/issues/%d/assignees{/user}", repo.apiURL, req.Repo, is.Number)
+		}
 		if is.Assignee != "" {
 			u := map[string]any{"login": is.Assignee}
 			e["assignee"], e["assignees"] = u, []any{u}
@@ -233,6 +290,104 @@ func (f *fakeGitHub) serveList(w http.ResponseWriter, r *http.Request, req ghReq
 		out = append(out, e)
 	}
 	json.NewEncoder(w).Encode(out)
+}
+
+// answerFail writes a ghFail; it reports whether it answered. An answer that
+// is not a failure (a 2xx status with no body) is left to the caller.
+func answerFail(w http.ResponseWriter, fl *ghFail) bool {
+	if fl == nil {
+		return false
+	}
+	if fl.Drop {
+		if hj, ok := w.(http.Hijacker); ok {
+			if c, _, err := hj.Hijack(); err == nil {
+				c.Close()
+			}
+		}
+		return true
+	}
+	if fl.Status >= 400 {
+		for k, v := range fl.Header {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(fl.Status)
+		w.Write([]byte(fl.Body))
+		return true
+	}
+	return false
+}
+
+// serveUser answers GET /user with the token owner.
+func (f *fakeGitHub) serveUser(w http.ResponseWriter) {
+	f.mu.Lock()
+	fl, login := f.userFail, f.userLogin
+	f.mu.Unlock()
+	if answerFail(w, fl) {
+		return
+	}
+	if fl != nil && fl.Body != "" {
+		w.Write([]byte(fl.Body))
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]any{"login": login, "id": 1})
+}
+
+// serveAssign answers POST /repos/{o}/{r}/issues/{n}/assignees like GitHub: 201
+// with the issue and its assignees. A success stores the assignment, so the list
+// with assignee=none no longer returns the issue.
+func (f *fakeGitHub) serveAssign(w http.ResponseWriter, r *http.Request, req ghReq) {
+	f.mu.Lock()
+	hook := f.onAssign
+	var fl *ghFail
+	if repo := f.repos[req.Repo]; repo != nil {
+		fl = repo.assignFail[req.Number]
+	}
+	f.mu.Unlock()
+	if hook != nil {
+		hook(req.Repo, req.Number, r)
+	}
+	if answerFail(w, fl) {
+		return
+	}
+	if fl != nil && fl.Body != "" {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(fl.Body))
+		return
+	}
+	var in struct {
+		Assignees []string `json:"assignees"`
+	}
+	if err := json.Unmarshal([]byte(req.Body), &in); err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
+	got := in.Assignees
+	if fl != nil && fl.Assignees != nil {
+		got = *fl.Assignees
+	}
+	f.mu.Lock()
+	found := false
+	if repo := f.repos[req.Repo]; repo != nil {
+		for i := range repo.issues {
+			if repo.issues[i].Number == req.Number {
+				found = true
+				if len(got) > 0 {
+					repo.issues[i].Assignee = got[0]
+				}
+			}
+		}
+	}
+	f.mu.Unlock()
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	users := []map[string]any{}
+	for _, l := range got {
+		users = append(users, map[string]any{"login": l})
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]any{"number": req.Number, "state": "open", "assignees": users})
 }
 
 // serveItem answers the status refresh: a single object, separate from the list.
@@ -314,7 +469,7 @@ func (f *fakeGitHub) lists() []ghReq {
 func (f *fakeGitHub) items() []ghReq {
 	var out []ghReq
 	for _, r := range f.requests() {
-		if !r.List {
+		if !r.List && !r.User && !r.Assign {
 			out = append(out, r)
 		}
 	}
@@ -789,6 +944,15 @@ func TestImportCapIsSilent(t *testing.T) {
 	}
 
 	e.gh.resetLog()
+	// Story 88: run one assigned issues 1..20; un-assign them again so that the
+	// second run pages as story 87 described (nothing else changes).
+	e.gh.edit(func() {
+		for _, r := range e.gh.repos {
+			for i := range r.issues {
+				r.issues[i].Assignee = ""
+			}
+		}
+	})
 	e.run()
 
 	e.wantNoError()
@@ -1140,8 +1304,9 @@ func TestImportHonoursCancellation(t *testing.T) {
 	e.wantNumbers(p2, []int64{})
 }
 
-// AC18: every request of a full run (lists, pages, refresh) is a GET.
-func TestImportOnlyGET(t *testing.T) {
+// Story 88 AC14 (was story 87's AC18): the only non-GET request of a full run
+// is the assignment POST; lists, pages and the status refresh stay GET.
+func TestImportOnlyAssignmentWrites(t *testing.T) {
 	e := newImportEnv(t, "tok")
 	p := e.project("P", "acme/w")
 	e.project("Q", "broken/repo")
@@ -1156,9 +1321,22 @@ func TestImportOnlyGET(t *testing.T) {
 	if len(e.gh.lists()) < 4 || len(e.gh.items()) < 6 {
 		t.Errorf("expected list and status requests, got %d and %d", len(e.gh.lists()), len(e.gh.items()))
 	}
+	posts := 0
 	for _, r := range e.gh.requests() {
+		switch {
+		case r.Method == http.MethodGet:
+		case r.Method == http.MethodPost && r.Assign:
+			posts++
+		default:
+			t.Errorf("%s %s: only GET and the assignment POST are allowed", r.Method, r.Path)
+		}
+	}
+	if posts != 5 {
+		t.Errorf("want 5 assignment POSTs (one per imported issue), got %d", posts)
+	}
+	for _, r := range e.gh.items() {
 		if r.Method != http.MethodGet {
-			t.Errorf("%s %s: the sync must only send GET", r.Method, r.Path)
+			t.Errorf("status refresh %s %s must be GET", r.Method, r.Path)
 		}
 	}
 	e.wantNumbers(p, seq(1, 5))
@@ -1187,6 +1365,9 @@ func TestImportNoCleanupAndRecreate(t *testing.T) {
 		r := e.gh.repos["acme/w"]
 		r.issues[0].State = "closed"
 		r.issues[1].Assignee = "bob"
+		// Story 88: run one assigned all three; issue 3 is unassigned again
+		// (someone un-assigned it), so it still matches.
+		r.issues[2].Assignee = ""
 	})
 	if err := e.st.DeleteIssue(before[3].ID); err != nil {
 		t.Fatal(err)

@@ -1,10 +1,12 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,6 +21,11 @@ import (
 // counted across all projects (one GitHub issue created in two projects counts
 // as two). The rest follows on later runs; reaching the cap is not an error.
 const impCap = 20
+
+// impAssignCap is the largest number of assignment requests one sync run sends,
+// counted across all repositories; failed requests count, the token owner
+// lookup does not. Reaching it is silent: the rest follows on later runs.
+const impAssignCap = 20
 
 // impListQuery is what the import asks GitHub's issue list for: open issues
 // with no assignee, oldest first, at GitHub's maximum page size. GitHub pages
@@ -57,8 +64,9 @@ func (e impEntry) impIsPull() bool {
 // repository and does not have the reference yet gets one. It runs at the start
 // of each sync run, before the status refresh, so the new references are
 // refreshed in the same run. It needs a token and a project linked to a
-// repository; without either it does nothing and that is not an error. It only
-// reads GitHub.
+// repository; without either it does nothing and that is not an error. Once a
+// repository's listing ends, it assigns the issues that every linked project
+// now references to the token's owner (see impAssign).
 //
 // A reference that exists already is left untouched, and an insert that finds
 // one (created elsewhere in the meantime) is a silent skip that costs no cap
@@ -78,18 +86,20 @@ func (y *Syncer) importIssues(ctx context.Context) error {
 	repos, firstErr := impTargets(projects)
 	base := y.Client.impBase()
 	created := 0
+	st := &impRun{first: firstErr}
 	for _, r := range repos {
+		var pending []int64 // issues referenced in every linked project, to assign
 		page := fmt.Sprintf("%s/repos/%s/issues?%s", base, r.repo, impListQuery.Encode())
 		for page != "" && created < impCap {
 			if err := ctx.Err(); err != nil {
-				return impKeep(firstErr, err)
+				return impKeep(st.first, err)
 			}
 			entries, next, err := y.Client.impIssuesPage(ctx, page)
 			if err != nil {
 				if impIsFatal(err) {
 					return err
 				}
-				firstErr = impKeep(firstErr, fmt.Errorf("github import: project %d %s: %w", r.ids[0], r.repo, err))
+				st.first = impKeep(st.first, fmt.Errorf("github import: project %d %s: %w", r.ids[0], r.repo, err))
 				break // this repository cannot be listed; the next one still runs
 			}
 			for _, e := range entries {
@@ -99,11 +109,13 @@ func (y *Syncer) importIssues(ctx context.Context) error {
 				if e.impIsPull() || e.Number <= 0 {
 					continue // not an issue, or no usable number: silently nothing
 				}
+				complete := true
 				for _, pid := range r.ids {
 					if err := ctx.Err(); err != nil {
-						return impKeep(firstErr, err)
+						return impKeep(st.first, err)
 					}
 					if created >= impCap {
+						complete = false
 						break
 					}
 					_, err := y.Store.CreateIssue(pid, store.NewIssue{
@@ -118,19 +130,31 @@ func (y *Syncer) importIssues(ctx context.Context) error {
 					case errors.Is(err, store.ErrDuplicate):
 						// already referenced in this project: silent skip, no cap slot
 					default:
-						firstErr = impKeep(firstErr, fmt.Errorf("github import: project %d %s#%d: %w", pid, r.repo, e.Number, err))
+						complete = false
+						st.first = impKeep(st.first, fmt.Errorf("github import: project %d %s#%d: %w", pid, r.repo, e.Number, err))
 					}
+				}
+				if complete {
+					pending = append(pending, e.Number)
 				}
 			}
 			next, err = impNextPage(next, base)
 			if err != nil {
-				firstErr = impKeep(firstErr, fmt.Errorf("github import: project %d %s: %w", r.ids[0], r.repo, err))
+				st.first = impKeep(st.first, fmt.Errorf("github import: project %d %s: %w", r.ids[0], r.repo, err))
 				next = ""
 			}
 			page = next
 		}
+		// Assigning while paging would shrink the assignee=none list under the
+		// page numbers, so it waits until this repository's paging has ended.
+		if err := y.impAssign(ctx, st, r, pending); err != nil {
+			if impIsFatal(err) {
+				return err
+			}
+			return impKeep(st.first, err)
+		}
 	}
-	return firstErr
+	return st.first
 }
 
 // impTargets groups the projects that link a repository by repository, in order
@@ -254,4 +278,178 @@ func impKeep(first, err error) error {
 		return first
 	}
 	return err
+}
+
+// impRun is the state of one import run that the assignment shares with the
+// reference walk: the first error, the assignment requests sent so far and
+// whether the token owner was already asked for in this run.
+type impRun struct {
+	first   error
+	posts   int
+	lookups int
+}
+
+// impAssign assigns the given issues of repository r to the token's owner, in
+// order, up to impAssignCap requests per run. It returns only what ends the
+// run (a fatal failure or the cancelled context); other failures are kept in
+// st as the first error of the run and the next issue is tried.
+func (y *Syncer) impAssign(ctx context.Context, st *impRun, r impRepo, numbers []int64) error {
+	for _, n := range numbers {
+		if st.posts >= impAssignCap {
+			return nil // silent: later runs assign the rest
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		login, err := y.impOwner(ctx, st)
+		if err != nil {
+			return err
+		}
+		if login == "" {
+			return nil // lookup failed (kept as the error): no assignment this run
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		st.posts++
+		err = y.Client.impAssignIssue(ctx, r.repo, n, login)
+		if err == nil {
+			continue
+		}
+		if ctx.Err() != nil {
+			return ctx.Err() // cut short by the cancellation: not an assign error
+		}
+		if impIsFatal(err) {
+			return err
+		}
+		st.first = impKeep(st.first, fmt.Errorf("github assign: project %d %s#%d: %w", r.ids[0], r.repo, n, err))
+	}
+	return nil
+}
+
+// impOwner returns the login of the token's owner: the cached one, else GET
+// /user, at most once per run (a failed lookup is recorded and not repeated in
+// this run, nor cached). An empty login with a nil error means the lookup
+// failed non-fatally.
+func (y *Syncer) impOwner(ctx context.Context, st *impRun) (string, error) {
+	y.mu.Lock()
+	login := y.owner
+	y.mu.Unlock()
+	if login != "" {
+		return login, nil
+	}
+	if st.lookups > 0 {
+		return "", nil
+	}
+	st.lookups++
+	login, err := y.Client.impUser(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if impIsFatal(err) {
+			return "", err
+		}
+		st.first = impKeep(st.first, fmt.Errorf("github assign: cannot determine the token owner: %w", err))
+		return "", nil
+	}
+	y.mu.Lock()
+	y.owner = login
+	y.mu.Unlock()
+	return login, nil
+}
+
+// impWriteFatal is impFatal for the requests that write or look up the token's
+// owner: a 403 with a Retry-After header (GitHub's secondary limits) is a rate
+// limit there too. List and refresh requests keep impFatal.
+func impWriteFatal(resp *http.Response) error {
+	if err := impFatal(resp); err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusForbidden && resp.Header.Get("Retry-After") != "" {
+		return ErrRateLimited
+	}
+	return nil
+}
+
+// impSend sends a request to the API base with the token and the usual headers.
+func (c *Client) impSend(ctx context.Context, method, target string, body []byte) (*http.Response, error) {
+	var rd io.Reader
+	if body != nil {
+		rd = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, rd)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "dprocess")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return c.impHTTP().Do(req)
+}
+
+// impUser asks GitHub who owns the token (GET /user).
+func (c *Client) impUser(ctx context.Context) (string, error) {
+	resp, err := c.impSend(ctx, http.MethodGet, c.impBase()+"/user", nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if err := impWriteFatal(resp); err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub answered %d", resp.StatusCode)
+	}
+	var u struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return "", fmt.Errorf("unreadable GitHub response: %w", err)
+	}
+	if u.Login == "" {
+		return "", errors.New("unreadable GitHub response: no login")
+	}
+	return u.Login, nil
+}
+
+// impAssignIssue adds login as an assignee of one issue. The URL is built from
+// the linked repository and the number. GitHub may answer success and still
+// drop an assignee without push access, so the answer must list login.
+func (c *Client) impAssignIssue(ctx context.Context, repo string, number int64, login string) error {
+	body, err := json.Marshal(map[string][]string{"assignees": {login}})
+	if err != nil {
+		return err
+	}
+	resp, err := c.impSend(ctx, http.MethodPost,
+		fmt.Sprintf("%s/repos/%s/issues/%d/assignees", c.impBase(), repo, number), body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if err := impWriteFatal(resp); err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitHub answered %d", resp.StatusCode)
+	}
+	var out struct {
+		Assignees []struct {
+			Login string `json:"login"`
+		} `json:"assignees"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("unreadable GitHub response: %w", err)
+	}
+	for _, a := range out.Assignees {
+		if strings.EqualFold(a.Login, login) {
+			return nil
+		}
+	}
+	return fmt.Errorf("GitHub did not assign %s (the token needs write access to issues)", login)
 }
