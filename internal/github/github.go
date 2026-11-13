@@ -1,5 +1,6 @@
-// Package github is the optional, strictly read-only GitHub sync: it only
-// issues GET requests. It imports the open, unassigned issues of a project's
+// Package github is the optional GitHub sync. Its only write to GitHub is
+// assigning each imported issue to the token owner; everything else it sends is
+// a GET request. It imports the open, unassigned issues of a project's
 // linked repository as issue references, and caches the title and
 // open/closed/merged state of the issues and pull requests that DProcess
 // already links to.
@@ -141,7 +142,8 @@ func (y *Syncer) Status() Status {
 // RunOnce imports the open, unassigned GitHub issues of the linked repositories
 // and refreshes every linked item. Items that cannot be read keep their
 // old (eventually stale, hence unknown) status; a bad token or rate limit ends
-// the run. It never writes to GitHub and never fails the server.
+// the run. Its only write to GitHub is assigning imported issues to the token
+// owner; it never fails the server.
 func (y *Syncer) RunOnce(ctx context.Context) {
 	runErr := y.sync(ctx)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")

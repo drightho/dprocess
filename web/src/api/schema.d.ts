@@ -29,7 +29,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether the optional read-only GitHub status sync is running
+         * Whether the optional GitHub status sync is running
          * @description The sync is off at startup unless the server was started with --github-sync, and can be turned on or off while running with PUT. When on, it caches the title and state of linked issues and pull requests. A missing or invalid token never fails the server; last_error says what went wrong. When the sync runs with DPROCESS_GITHUB_TOKEN set and a project linked to a repository (github_repo_url), it also imports that repository's open, unassigned issues as issue references, besides caching the status of linked issues and pull requests. Imported issues are then assigned on GitHub to the token owner (the owner of DPROCESS_GITHUB_TOKEN) once every project linked to the repository has the reference, so they are not listed and imported again. last_error can also report import and assignment errors, such as a repository and project whose issues could not be listed, an issue that could not be assigned or a token owner that could not be determined; a 401 or a rate limit during the import or the assignment ends the run with the existing message.
          */
         get: operations["getGitHubSync"];
