@@ -93,6 +93,20 @@ func syncOp(t *testing.T, method string) (summary, desc string) {
 	return s, strings.Join(strings.Fields(d), " ")
 }
 
+var (
+	// \bassign\b must not match "unassigned".
+	assignRe      = regexp.MustCompile(`(?i)\bassign(s|ed|ment|ments)?\b`)
+	allProjectsRe = regexp.MustCompile(`(?i)\b(every|all)\b.{0,60}\bprojects?\b|\bprojects?\b.{0,60}\b(every|all)\b`)
+	linkedRepoRe  = regexp.MustCompile(`(?i)\blinked\b.{0,60}(repositor|github_repo_url)|(repositor|github_repo_url).{0,60}\blinked\b`)
+)
+
+func mustMatch(t *testing.T, what, text string, re *regexp.Regexp, desc string) {
+	t.Helper()
+	if !re.MatchString(text) {
+		t.Errorf("%s lacks %s:\n%s", what, desc, text)
+	}
+}
+
 func mustContainAll(t *testing.T, what, text string, words ...string) {
 	t.Helper()
 	low := strings.ToLower(text)
@@ -110,26 +124,30 @@ func TestGitHubSyncSpecDescribesIssueImport(t *testing.T) {
 			_, d := syncOp(t, m)
 			mustContainAll(t, m+" description", d,
 				"DPROCESS_GITHUB_TOKEN", "repositor", "import", "open", "unassigned",
-				"issue reference", "pull request", "assign", "token owner")
+				"issue reference", "pull request", "token owner")
+			mustMatch(t, m+" description", d, assignRe, "an assignment word (assign, assigned, assignment)")
+			mustMatch(t, m+" description", d, allProjectsRe, "every/all near project")
+			mustMatch(t, m+" description", d, linkedRepoRe, "linked near repository or github_repo_url")
 		})
 	}
 }
 
 // AC2: last_error also reports import errors, including assignment errors.
+// Passes when any sentence naming last_error mentions both.
 func TestGitHubSyncSpecGetDescribesImportErrors(t *testing.T) {
 	_, d := syncOp(t, "get")
-	idx := strings.Index(d, "last_error")
-	if idx < 0 {
+	if !strings.Contains(d, "last_error") {
 		t.Fatal("GET description does not mention last_error")
 	}
-	// The clause: from the sentence containing last_error to the end of it.
-	start := strings.LastIndex(d[:idx], ". ") + 1
-	end := len(d)
-	if e := strings.Index(d[idx:], ". "); e >= 0 {
-		end = idx + e
+	found := false
+	for _, sent := range strings.Split(d, ". ") {
+		if strings.Contains(sent, "last_error") && strings.Contains(strings.ToLower(sent), "import") && assignRe.MatchString(sent) {
+			found = true
+		}
 	}
-	clause := d[start:end]
-	mustContainAll(t, "last_error sentence", clause, "import", "assign")
+	if !found {
+		t.Errorf("no sentence naming last_error mentions both the import and assignment:\n%s", d)
+	}
 	mustContainAll(t, "GET description", d, "listed")
 }
 
@@ -156,16 +174,15 @@ func TestGitHubSyncSpecDescriptionsNotReadOnly(t *testing.T) {
 	}
 }
 
-// AC3: the summaries are unchanged.
+// AC3: the PUT summary is unchanged. The GET summary is not pinned (story 92
+// changes it and may not edit this file); it only has to exist.
 func TestGitHubSyncSpecSummariesUnchanged(t *testing.T) {
-	want := map[string]string{
-		"get": "Whether the optional read-only GitHub status sync is running",
-		"put": "Turn the GitHub status sync on or off while the server is running",
+	if s, _ := syncOp(t, "get"); strings.TrimSpace(s) == "" {
+		t.Error("GET summary is empty")
 	}
-	for m, w := range want {
-		if s, _ := syncOp(t, m); s != w {
-			t.Errorf("%s summary = %q, want %q", m, s, w)
-		}
+	want := "Turn the GitHub status sync on or off while the server is running"
+	if s, _ := syncOp(t, "put"); s != want {
+		t.Errorf("put summary = %q, want %q", s, want)
 	}
 }
 
@@ -218,28 +235,40 @@ func TestGitHubSyncSpecContractUnchanged(t *testing.T) {
 }
 
 // AC5 (light): the regenerated types carry the new description, so make gen-api was run.
+// Each description is found by its operation (the comment block just above
+// the get/put line), not by summary text, so a summary change by another
+// story does not break this test.
 func TestGitHubSyncTypesCarryDescription(t *testing.T) {
 	raw, err := os.ReadFile("../../web/src/api/schema.d.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(string(raw), "\n")
-	summaries := map[string]string{
-		"get": "Whether the optional read-only GitHub status sync is running",
-		"put": "Turn the GitHub status sync on or off while the server is running",
+	ops := map[string]string{
+		"get": `get: operations["getGitHubSync"];`,
+		"put": `put: operations["setGitHubSync"];`,
 	}
-	for m, sum := range summaries {
-		var got string
+	for m, marker := range ops {
+		at := -1
 		for i, l := range lines {
-			if strings.TrimSpace(l) == "* "+sum && i+1 < len(lines) {
-				got = lines[i+1]
+			if strings.TrimSpace(l) == marker {
+				at = i
 				break
 			}
 		}
-		if got == "" {
-			t.Fatalf("%s: summary comment not found in schema.d.ts", m)
+		if at < 0 {
+			t.Fatalf("%s: %s not found in schema.d.ts", m, marker)
 		}
-		mustContainAll(t, m+" description in schema.d.ts", got,
+		var comment []string
+		for i := at - 1; i >= 0; i-- {
+			comment = append(comment, lines[i])
+			if strings.TrimSpace(lines[i]) == "/**" {
+				break
+			}
+		}
+		text := strings.Join(comment, " ")
+		mustContainAll(t, m+" comment in schema.d.ts", text,
 			"@description", "unassigned", "issue reference", "token owner")
+		mustMatch(t, m+" comment in schema.d.ts", text, assignRe, "an assignment word")
 	}
 }
