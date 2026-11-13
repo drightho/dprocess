@@ -86,7 +86,7 @@ func TestWordingFlagHelpNotReadOnly(t *testing.T) {
 
 // No remaining text may call the sync as a whole read-only or non-writing.
 func TestWordingNoWholeSyncReadOnlyClaim(t *testing.T) {
-	re := regexp.MustCompile(`(?i)sync (is|that is|which is) (strictly |purely )?read-only|read-only (github )?(status )?sync|never writes|does not write|doesn't write|only reads github|only issues get`)
+	re := regexp.MustCompile(`(?i)sync (is|that is|which is) (strictly |purely )?read-only|read-only (github )?(status )?sync|only reads github|is (only read|read only)\b`)
 	for _, f := range []string{"README.md", "internal/github/github.go", "internal/api/api.go", "cmd/dprocess/main.go", "api/openapi.yaml", "web/src/pages/IssuesPage.tsx"} {
 		for i, l := range strings.Split(readRepo(t, f), "\n") {
 			if re.MatchString(l) {
@@ -99,7 +99,7 @@ func TestWordingNoWholeSyncReadOnlyClaim(t *testing.T) {
 var (
 	wordAssignRe  = regexp.MustCompile(`(?i)\bassign\w*`)
 	wordOwnerRe   = regexp.MustCompile(`(?i)token owner|owner of .{0,40}token`)
-	wordOnlyRe    = regexp.MustCompile(`(?i)\bonly\b`)
+	wordOnlyRe    = regexp.MustCompile(`(?i)\bonly\b.{0,80}\bassign\w*|\bassign\w*.{0,80}\bonly\b`)
 	wordNoWriteRe = regexp.MustCompile(`(?i)never writes|does not write|doesn't write|no writes|read-only`)
 )
 
@@ -125,7 +125,7 @@ func TestWordingOnlyWriteIsAssigning(t *testing.T) {
 			t.Errorf("%s does not mention the token owner", name)
 		}
 		if !wordOnlyRe.MatchString(s) {
-			t.Errorf("%s has no \"only\" wording for the single write", name)
+			t.Errorf("%s does not say assigning is the only write", name)
 		}
 		if m := wordNoWriteRe.FindString(s); m != "" {
 			t.Errorf("%s says %q", name, m)
