@@ -1206,3 +1206,48 @@ func TestImportNoCleanupAndRecreate(t *testing.T) {
 	}
 	e.wantNoError()
 }
+
+// Story 89: the first list request of each linked repository asks GitHub for
+// exactly open, unassigned issues, oldest first by creation, 100 per page. Only
+// that request is built by the import; later pages follow the Link header.
+func TestImportListQuery(t *testing.T) {
+	e := newImportEnv(t, "tok")
+	e.project("A1", "acme/a")
+	e.project("B", "acme/b")
+	e.project("A2", "acme/a") // a second link to acme/a: still one list per run
+	e.gh.maxPerPage = 2       // acme/a has follow-up pages, which are not checked
+	e.gh.repo("acme/a", openIssues(1, 5)...)
+	e.gh.repo("acme/b", openIssues(1, 1)...)
+
+	e.run()
+
+	want := url.Values{
+		"state":     {"open"},
+		"assignee":  {"none"},
+		"sort":      {"created"},
+		"direction": {"asc"},
+		"per_page":  {"100"},
+	}
+	first := map[string]ghReq{}
+	for _, r := range e.gh.lists() {
+		if _, ok := first[r.Repo]; !ok {
+			first[r.Repo] = r
+		}
+	}
+	for _, repo := range []string{"acme/a", "acme/b"} {
+		r, ok := first[repo]
+		if !ok {
+			t.Errorf("%s: no list request reached GitHub", repo)
+			continue
+		}
+		got, err := url.ParseQuery(r.Query)
+		if err != nil {
+			t.Errorf("%s: unreadable query %q: %v", repo, r.Query, err)
+			continue
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: first list request has query %v, want exactly %v", repo, got, want)
+		}
+	}
+	e.wantNoError()
+}
